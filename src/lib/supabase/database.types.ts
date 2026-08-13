@@ -39,6 +39,102 @@ export type Database = {
   }
   public: {
     Tables: {
+      exercise_instances: {
+        Row: {
+          created_at: string
+          exercise_id: string
+          extra: Json
+          id: string
+          notes: string | null
+          position: number
+          sets: Json
+          total_distance_m: number | null
+          total_duration_s: number | null
+          total_elevation_m: number | null
+          total_load: number | null
+          user_id: string
+          workout_id: string
+        }
+        Insert: {
+          created_at?: string
+          exercise_id: string
+          extra?: Json
+          id?: string
+          notes?: string | null
+          position?: number
+          sets?: Json
+          total_distance_m?: number | null
+          total_duration_s?: number | null
+          total_elevation_m?: number | null
+          total_load?: number | null
+          user_id: string
+          workout_id: string
+        }
+        Update: {
+          created_at?: string
+          exercise_id?: string
+          extra?: Json
+          id?: string
+          notes?: string | null
+          position?: number
+          sets?: Json
+          total_distance_m?: number | null
+          total_duration_s?: number | null
+          total_elevation_m?: number | null
+          total_load?: number | null
+          user_id?: string
+          workout_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_instances_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_instances_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercises: {
+        Row: {
+          created_at: string
+          equipment: string | null
+          extra: Json
+          id: string
+          measurement_type: Database["public"]["Enums"]["measurement_type"]
+          muscle_group: string | null
+          name: string
+          owner_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          equipment?: string | null
+          extra?: Json
+          id?: string
+          measurement_type: Database["public"]["Enums"]["measurement_type"]
+          muscle_group?: string | null
+          name: string
+          owner_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          equipment?: string | null
+          extra?: Json
+          id?: string
+          measurement_type?: Database["public"]["Enums"]["measurement_type"]
+          muscle_group?: string | null
+          name?: string
+          owner_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           constraints: string | null
@@ -72,15 +168,50 @@ export type Database = {
         }
         Relationships: []
       }
+      workouts: {
+        Row: {
+          created_at: string
+          extra: Json
+          id: string
+          notes: string | null
+          performed_at: string
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          extra?: Json
+          id?: string
+          notes?: string | null
+          performed_at?: string
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          extra?: Json
+          id?: string
+          notes?: string | null
+          performed_at?: string
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      sets_sum: { Args: { metric: string; sets: Json }; Returns: number }
+      sets_total_load: { Args: { sets: Json }; Returns: number }
     }
     Enums: {
-      [_ in never]: never
+      measurement_type:
+        | "weight_reps"
+        | "reps_only"
+        | "distance_time"
+        | "time_only"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -210,6 +341,13 @@ export const Constants = {
     Enums: {},
   },
   public: {
-    Enums: {},
+    Enums: {
+      measurement_type: [
+        "weight_reps",
+        "reps_only",
+        "distance_time",
+        "time_only",
+      ],
+    },
   },
 } as const
