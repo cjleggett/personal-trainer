@@ -177,6 +177,7 @@ export type Database = {
           performed_at: string
           title: string | null
           user_id: string
+          workout_type: string | null
         }
         Insert: {
           created_at?: string
@@ -186,6 +187,7 @@ export type Database = {
           performed_at?: string
           title?: string | null
           user_id: string
+          workout_type?: string | null
         }
         Update: {
           created_at?: string
@@ -195,6 +197,7 @@ export type Database = {
           performed_at?: string
           title?: string | null
           user_id?: string
+          workout_type?: string | null
         }
         Relationships: []
       }

@@ -38,8 +38,15 @@ export default async function DashboardPage() {
         {profile?.display_name ? ` (${profile.display_name})` : ""}.
       </p>
 
+      <a
+        href="/workouts/new"
+        className="inline-flex w-fit items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
+      >
+        Log a workout
+      </a>
+
       <p className="text-sm text-zinc-500">
-        Logging, workout generation, and training plans come next.
+        Workout history, generation, and training plans come next.
       </p>
     </main>
   );
