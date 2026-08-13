@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signout } from "@/app/login/actions";
 
@@ -38,15 +39,23 @@ export default async function DashboardPage() {
         {profile?.display_name ? ` (${profile.display_name})` : ""}.
       </p>
 
-      <a
-        href="/workouts/new"
-        className="inline-flex w-fit items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
-      >
-        Log a workout
-      </a>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/workouts/new"
+          className="inline-flex w-fit items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
+        >
+          Log a workout
+        </Link>
+        <Link
+          href="/workouts"
+          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+        >
+          View history
+        </Link>
+      </div>
 
       <p className="text-sm text-zinc-500">
-        Workout history, generation, and training plans come next.
+        Workout generation and training plans come next.
       </p>
     </main>
   );

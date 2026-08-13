@@ -102,3 +102,41 @@ export function todayTitlePrefix(date = new Date()): string {
   const dd = String(date.getDate()).padStart(2, "0");
   return `${mm}/${dd}/${date.getFullYear()}`;
 }
+
+// ── Display helpers (canonical stored value → friendly text) ─────────────────
+
+/** A stored set object: metric key → canonical numeric value. */
+export type StoredSet = Record<string, number>;
+
+/** Format one stored set as e.g. "100kg × 5" or "5.0 km · 25.0 min". */
+export function formatSet(
+  measurementType: MeasurementType,
+  set: StoredSet,
+): string {
+  const parts: string[] = [];
+  for (const field of METRIC_FIELDS[measurementType]) {
+    const raw = set[field.key];
+    if (raw === undefined || raw === null) continue;
+    const value = field.factor ? raw / field.factor : raw;
+    const rounded = Math.round(value * 100) / 100;
+    parts.push(field.unit ? `${rounded} ${field.unit}` : `${rounded}`);
+  }
+  return parts.join(" · ");
+}
+
+/** Collapse consecutive identical sets into { set, count } for readable display,
+ * inverting the save-time expansion (3 identical sets → "3 × …"). */
+export function collapseSets(
+  sets: StoredSet[],
+): { set: StoredSet; count: number }[] {
+  const out: { set: StoredSet; count: number }[] = [];
+  for (const set of sets) {
+    const last = out[out.length - 1];
+    if (last && JSON.stringify(last.set) === JSON.stringify(set)) {
+      last.count += 1;
+    } else {
+      out.push({ set, count: 1 });
+    }
+  }
+  return out;
+}
