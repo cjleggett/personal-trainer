@@ -7,6 +7,7 @@ import {
   WORKOUT_TYPE_PRESETS,
   todayTitlePrefix,
   autoExerciseForType,
+  parseTargetToMetrics,
   type MeasurementType,
 } from "@/lib/logging/metrics";
 import {
@@ -37,6 +38,19 @@ export type InitialWorkout = {
   }[];
 };
 
+// For create mode: seed a fresh draft (e.g. from a training-plan day). Unlike
+// `initial`, this does NOT put the form in edit mode — it just prefills fields
+// and carries the plan link through to the saved workout.
+export type PrefillWorkout = {
+  title?: string;
+  workoutType?: string;
+  notes?: string;
+  /** The plan day's high-level target (e.g. "8 mi @ easy"); parsed to seed sets. */
+  target?: string;
+  planId?: string;
+  planDayDate?: string; // YYYY-MM-DD
+};
+
 type SetGroupRow = { count: string; metrics: Record<string, string> };
 
 type DraftInstance = {
@@ -64,35 +78,67 @@ function todayIso(): string {
 export function WorkoutForm({
   catalog,
   initial,
+  prefill,
 }: {
   catalog: CatalogExercise[];
   initial?: InitialWorkout;
+  prefill?: PrefillWorkout;
 }) {
   const router = useRouter();
   const editing = !!initial;
 
-  const [workoutType, setWorkoutType] = useState(initial?.workoutType ?? "");
-  const [title, setTitle] = useState(initial?.title ?? "");
-  const [titleEdited, setTitleEdited] = useState(!!initial?.title);
-  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const seedType = initial?.workoutType ?? prefill?.workoutType ?? "";
+  const seedTitle = initial?.title ?? prefill?.title ?? "";
+
+  const [workoutType, setWorkoutType] = useState(seedType);
+  const [title, setTitle] = useState(seedTitle);
+  const [titleEdited, setTitleEdited] = useState(!!seedTitle);
+  const [notes, setNotes] = useState(initial?.notes ?? prefill?.notes ?? "");
   const [performedOn, setPerformedOn] = useState(
     initial?.performedOn ?? todayIso(),
   );
-  const [instances, setInstances] = useState<DraftInstance[]>(() =>
-    (initial?.instances ?? []).flatMap((si) => {
-      const exercise = catalog.find((e) => e.id === si.exerciseId);
-      if (!exercise) return [];
-      return [
-        {
-          uid: nextUid(),
-          exercise,
-          groups: si.groups.length ? si.groups : [newGroup()],
-          showOptional: false,
-          autoAdded: false,
-        },
-      ];
-    }),
-  );
+  const [instances, setInstances] = useState<DraftInstance[]>(() => {
+    if (initial) {
+      return initial.instances.flatMap((si) => {
+        const exercise = catalog.find((e) => e.id === si.exerciseId);
+        if (!exercise) return [];
+        return [
+          {
+            uid: nextUid(),
+            exercise,
+            groups: si.groups.length ? si.groups : [newGroup()],
+            showOptional: false,
+            autoAdded: false,
+          },
+        ];
+      });
+    }
+    // Create mode: seed the auto-add exercise for a single-activity prefill type
+    // (e.g. a "Run" plan day), mirroring what chooseType does interactively.
+    const name = prefill?.workoutType
+      ? autoExerciseForType(prefill.workoutType)
+      : null;
+    const exercise = name
+      ? catalog.find((e) => e.name.toLowerCase() === name.toLowerCase())
+      : undefined;
+    if (!exercise) return [];
+    // Seed the first set from the plan day's target (e.g. distance/duration).
+    const parsed = prefill?.target
+      ? parseTargetToMetrics(exercise.measurement_type, prefill.target)
+      : null;
+    const group: SetGroupRow = parsed
+      ? { count: parsed.count ?? "1", metrics: parsed.metrics }
+      : newGroup();
+    return [
+      {
+        uid: nextUid(),
+        exercise,
+        groups: [group],
+        showOptional: false,
+        autoAdded: true,
+      },
+    ];
+  });
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -160,6 +206,8 @@ export function WorkoutForm({
       workoutType: workoutType || undefined,
       notes: notes || undefined,
       performedOn,
+      planId: prefill?.planId,
+      planDayDate: prefill?.planDayDate,
       instances: instances.map((inst) => ({
         exerciseId: inst.exercise.id,
         measurementType: inst.exercise.measurement_type,

@@ -26,6 +26,9 @@ export type SavePayload = {
   notes?: string;
   /** ISO date (YYYY-MM-DD) of when the workout happened. Defaults to today. */
   performedOn?: string;
+  /** When logged from a training plan, the plan and the dated day it fulfills. */
+  planId?: string;
+  planDayDate?: string; // YYYY-MM-DD
   instances: InstancePayload[];
 };
 
@@ -105,6 +108,8 @@ export async function createWorkout(payload: SavePayload) {
       workout_type: workoutType,
       notes: payload.notes?.trim() || null,
       ...(performedAt ? { performed_at: performedAt } : {}),
+      ...(payload.planId ? { plan_id: payload.planId } : {}),
+      ...(payload.planDayDate ? { plan_day_date: payload.planDayDate } : {}),
     })
     .select("id")
     .single();
@@ -121,6 +126,7 @@ export async function createWorkout(payload: SavePayload) {
   }
 
   revalidatePath("/workouts");
+  revalidatePath("/dashboard");
   redirect("/dashboard");
 }
 

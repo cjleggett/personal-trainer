@@ -137,6 +137,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          coach_notes: string | null
           constraints: string | null
           created_at: string
           display_name: string | null
@@ -147,6 +148,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          coach_notes?: string | null
           constraints?: string | null
           created_at?: string
           display_name?: string | null
@@ -157,6 +159,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          coach_notes?: string | null
           constraints?: string | null
           created_at?: string
           display_name?: string | null
@@ -168,6 +171,45 @@ export type Database = {
         }
         Relationships: []
       }
+      training_plans: {
+        Row: {
+          created_at: string
+          goal_profile: Json
+          id: string
+          name: string
+          plan: Json
+          start_date: string
+          status: string
+          target_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal_profile: Json
+          id?: string
+          name: string
+          plan: Json
+          start_date: string
+          status?: string
+          target_date?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goal_profile?: Json
+          id?: string
+          name?: string
+          plan?: Json
+          start_date?: string
+          status?: string
+          target_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       workouts: {
         Row: {
           created_at: string
@@ -175,6 +217,8 @@ export type Database = {
           id: string
           notes: string | null
           performed_at: string
+          plan_day_date: string | null
+          plan_id: string | null
           title: string | null
           user_id: string
           workout_type: string | null
@@ -185,6 +229,8 @@ export type Database = {
           id?: string
           notes?: string | null
           performed_at?: string
+          plan_day_date?: string | null
+          plan_id?: string | null
           title?: string | null
           user_id: string
           workout_type?: string | null
@@ -195,11 +241,21 @@ export type Database = {
           id?: string
           notes?: string | null
           performed_at?: string
+          plan_day_date?: string | null
+          plan_id?: string | null
           title?: string | null
           user_id?: string
           workout_type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workouts_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "training_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

@@ -1,0 +1,28 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { IntakeChat } from "./IntakeChat";
+
+export default async function PlanPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  return (
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">New training plan</h1>
+        <Link href="/dashboard" className="text-sm text-zinc-500 hover:underline">
+          Cancel
+        </Link>
+      </header>
+      <p className="text-zinc-600 dark:text-zinc-400">
+        Tell me what you&apos;re training for. I&apos;ll look at your recent
+        history and ask a few questions before building a plan.
+      </p>
+      <IntakeChat />
+    </main>
+  );
+}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { METERS_PER_MILE } from "@/lib/logging/metrics";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -21,7 +22,7 @@ function summarize(
   const distance = instances.reduce((s, i) => s + (i.total_distance_m ?? 0), 0);
   const duration = instances.reduce((s, i) => s + (i.total_duration_s ?? 0), 0);
   const bits: string[] = [`${count} exercise${count === 1 ? "" : "s"}`];
-  if (distance > 0) bits.push(`${Math.round((distance / 1000) * 100) / 100} km`);
+  if (distance > 0) bits.push(`${Math.round((distance / METERS_PER_MILE) * 100) / 100} mi`);
   if (duration > 0) bits.push(`${Math.round(duration / 60)} min`);
   return bits.join(" · ");
 }
