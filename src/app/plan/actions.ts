@@ -69,6 +69,7 @@ async function runIntakeTurn(
   ];
 
   const result = await generateValidated({
+    feature: "intake",
     schema: intakeTurnSchema,
     system: intakeSystemPrompt,
     messages,
@@ -184,6 +185,7 @@ export async function generatePlan(
   ]);
 
   const generated = await generateValidated({
+    feature: "plan",
     schema: trainingPlanSchema,
     system: PLAN_SYSTEM_PROMPT,
     prompt: buildPlanRequest({

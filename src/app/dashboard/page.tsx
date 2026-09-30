@@ -215,6 +215,18 @@ export default async function DashboardPage() {
         >
           {parsed?.success ? "New plan" : "New training plan"}
         </Link>
+        <Link
+          href="/about"
+          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+        >
+          About me
+        </Link>
+        <Link
+          href="/usage"
+          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+        >
+          AI usage
+        </Link>
       </div>
 
       {!parsed?.success && (

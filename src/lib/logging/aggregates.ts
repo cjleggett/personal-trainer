@@ -34,7 +34,7 @@ export async function profileSummary(
 ): Promise<string> {
   const { data } = await supabase
     .from("profiles")
-    .select("goals, experience_level, equipment, constraints, coach_notes")
+    .select("goals, experience_level, equipment, constraints, about_me, coach_notes")
     .eq("id", userId)
     .single();
 
@@ -45,7 +45,10 @@ export async function profileSummary(
   if (data.goals) lines.push(`- Stated goals: ${data.goals}`);
   if (data.equipment) lines.push(`- Equipment available: ${data.equipment}`);
   if (data.constraints) lines.push(`- Constraints/injuries: ${data.constraints}`);
-  if (data.coach_notes) lines.push(`- Coach notes (durable preferences/context): ${data.coach_notes}`);
+  // About me is user-authored and read-only to the agent; coach notes are the
+  // agent's own durable memory (both editable in the About Me page).
+  if (data.about_me) lines.push(`- About me (written by the athlete; do not overwrite): ${data.about_me}`);
+  if (data.coach_notes) lines.push(`- Coach notes (your durable memory): ${data.coach_notes}`);
   return lines.length ? lines.join("\n") : "No profile details on file.";
 }
 

@@ -49,16 +49,29 @@ async function loadActivePlan(
 /** Run one coach turn: call the model, and persist the plan if it changed. */
 async function runCoachTurn(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
   planId: string | null,
   messages: ModelMessage[],
 ): Promise<CoachResult> {
   const result = await generateValidated({
+    feature: "coach",
     schema: coachTurnSchema,
     system: COACH_SYSTEM_PROMPT,
     messages,
   });
   if (!result.ok) return result;
   const turn: CoachTurn = result.object;
+
+  // The coach may update its own durable memory (coach_notes) on any turn. It
+  // only ever writes coach_notes — never about_me, which is user-only.
+  // Best-effort: a failure here shouldn't break the reply. RLS scopes to owner.
+  if (turn.updatedCoachNotes != null) {
+    await supabase
+      .from("profiles")
+      .update({ coach_notes: turn.updatedCoachNotes.trim() })
+      .eq("id", userId);
+    revalidatePath("/about");
+  }
 
   // If the plan changed, save it. start_date is untouched, so dates stay anchored.
   if (turn.kind === "updatePlan") {
@@ -127,7 +140,9 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
     firstMessage,
   });
 
-  return runCoachTurn(supabase, planId, [{ role: "user", content: opener }]);
+  return runCoachTurn(supabase, user.id, planId, [
+    { role: "user", content: opener },
+  ]);
 }
 
 /** Continue a coach conversation with the user's next reply. The client sends
@@ -151,5 +166,5 @@ export async function continueCoach(
     ...history,
     { role: "user", content: userMessage },
   ];
-  return runCoachTurn(supabase, row?.id ?? null, messages);
+  return runCoachTurn(supabase, user.id, row?.id ?? null, messages);
 }

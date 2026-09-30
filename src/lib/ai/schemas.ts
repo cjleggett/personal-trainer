@@ -153,6 +153,21 @@ export const workoutDraftSchema = z.object({
 
 export type WorkoutDraft = z.infer<typeof workoutDraftSchema>;
 
+/**
+ * Optional memory update the coach may attach to ANY turn. When it learns a
+ * durable, goal-independent preference or fact worth remembering ("dislikes
+ * burpees", "trains early mornings", "prefers trail runs"), it returns the FULL
+ * updated coach-notes text (existing notes + the new fact, de-duplicated), or
+ * null to leave them unchanged. This only ever writes the SHARED coach_notes —
+ * never the user-only About Me. See src/lib/ai/prompts/coach.ts.
+ */
+const updatedCoachNotes = z
+  .string()
+  .nullable()
+  .describe(
+    "Full updated coach-notes text (existing notes merged with any durable new preference/fact from THIS message, de-duplicated), or null to leave unchanged. Only durable, goal-independent facts — not this conversation's transient details. Never restate the user's About Me here.",
+  );
+
 export const coachTurnSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("reply"),
@@ -161,6 +176,7 @@ export const coachTurnSchema = z.discriminatedUnion("kind", [
       .describe(
         "A conversational reply: answer the question, give advice, or ask a clarification. Use this when no plan change or logging is warranted yet.",
       ),
+    updatedCoachNotes,
   }),
   z.object({
     kind: z.literal("updatePlan"),
@@ -172,6 +188,7 @@ export const coachTurnSchema = z.discriminatedUnion("kind", [
     plan: trainingPlanSchema.describe(
       "The FULL revised plan. Preserve everything the user did not ask to change; keep the same number of weeks and the Monday→Sunday day order.",
     ),
+    updatedCoachNotes,
   }),
   z.object({
     kind: z.literal("draftWorkout"),
@@ -181,6 +198,7 @@ export const coachTurnSchema = z.discriminatedUnion("kind", [
         "A short message introducing the draft, e.g. what you inferred and inviting them to review/edit before saving.",
       ),
     workout: workoutDraftSchema,
+    updatedCoachNotes,
   }),
 ]);
 
