@@ -16,7 +16,11 @@ import {
   buildIntakeOpener,
 } from "@/lib/ai/prompts/intake";
 import { PLAN_SYSTEM_PROMPT, buildPlanRequest } from "@/lib/ai/prompts/plan";
-import { profileSummary, historySummary } from "@/lib/logging/aggregates";
+import {
+  profileSummary,
+  historySummary,
+  recentDetailedWorkouts,
+} from "@/lib/logging/aggregates";
 import { nextMonday, weeksUntil } from "@/lib/logging/plan-dates";
 
 /**
@@ -172,9 +176,11 @@ export async function generatePlan(
     );
   }
 
-  const [profile, history] = await Promise.all([
+  const [profile, history90, history30, recentDetail] = await Promise.all([
     profileSummary(supabase, user.id),
-    historySummary(supabase, user.id, now),
+    historySummary(supabase, user.id, now, 90),
+    historySummary(supabase, user.id, now, 30),
+    recentDetailedWorkouts(supabase, user.id, now, 10),
   ]);
 
   const generated = await generateValidated({
@@ -186,7 +192,9 @@ export async function generatePlan(
       numberOfWeeks,
       goalProfileJson: JSON.stringify(goalProfile, null, 2),
       profileSummary: profile,
-      historySummary: history,
+      history90Summary: history90,
+      history30Summary: history30,
+      recentDetail,
     }),
   });
   if (!generated.ok) return generated;

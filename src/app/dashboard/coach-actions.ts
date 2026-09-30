@@ -11,7 +11,11 @@ import {
 } from "@/lib/ai/schemas";
 import { generateValidated } from "@/lib/ai/generate";
 import { COACH_SYSTEM_PROMPT, buildCoachContext } from "@/lib/ai/prompts/coach";
-import { profileSummary, historySummary } from "@/lib/logging/aggregates";
+import {
+  profileSummary,
+  historySummary,
+  recentDetailedWorkouts,
+} from "@/lib/logging/aggregates";
 import { weekDateRanges } from "@/lib/logging/plan-dates";
 
 /**
@@ -94,10 +98,11 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
 
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
-  const [row, profile, history] = await Promise.all([
+  const [row, profile, history, recentDetail] = await Promise.all([
     loadActivePlan(supabase),
     profileSummary(supabase, user.id),
     historySummary(supabase, user.id, now),
+    recentDetailedWorkouts(supabase, user.id, now, 10),
   ]);
 
   let planJson: string | null = null;
@@ -118,6 +123,7 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
     weekDates,
     profileSummary: profile,
     historySummary: history,
+    recentDetail,
     firstMessage,
   });
 

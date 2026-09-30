@@ -62,7 +62,8 @@ export function buildCoachContext(input: {
   planJson: string | null; // JSON.stringify(current plan), or null if none
   weekDates: { weekNumber: number; monday: string; sunday: string }[];
   profileSummary: string;
-  historySummary: string;
+  historySummary: string; // last 90 days, aggregate
+  recentDetail: string; // last ~10 days, per-workout detail + notes
   firstMessage: string;
 }): string {
   const planBlock = input.planJson
@@ -79,8 +80,13 @@ ${planBlock}
 What their profile says about them:
 ${input.profileSummary}
 
-A summary of their recent training history:
+A summary of their recent training history (last 90 days):
 ${input.historySummary}
+
+Recent detailed workouts (exercises, loads, distances, and how sessions felt —
+lean on these specifics when answering questions about soreness, fatigue,
+progress, or what to log):
+${input.recentDetail}
 
 The athlete says:
 """

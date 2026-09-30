@@ -52,7 +52,9 @@ export function buildPlanRequest(input: {
   numberOfWeeks: number;
   goalProfileJson: string; // JSON.stringify(goalProfile)
   profileSummary: string;
-  historySummary: string;
+  history90Summary: string; // last 90 days, aggregate
+  history30Summary: string; // last 30 days, aggregate (recent trend)
+  recentDetail: string; // last ~10 days, per-workout detail + notes
 }): string {
   return `
 Today is ${input.today}. The plan should start ${input.startDate} and span
@@ -64,8 +66,17 @@ ${input.goalProfileJson}
 What their profile says about them:
 ${input.profileSummary}
 
-A summary of their recent training history:
-${input.historySummary}
+Training history — last 90 days (overall baseline):
+${input.history90Summary}
+
+Training history — last 30 days (recent trend; compare against the 90-day
+baseline to judge whether they're ramping up, holding, or tapering):
+${input.history30Summary}
+
+Recent detailed workouts (use these specifics — exercises, loads, distances,
+and how sessions felt — to set realistic starting targets and respect fatigue,
+soreness, or niggles mentioned in the notes):
+${input.recentDetail}
 
 Design the full ${input.numberOfWeeks}-week plan now. Periodize toward the goal,
 respect their availability, fixed days, and constraints, and output every week
