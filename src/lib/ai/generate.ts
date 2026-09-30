@@ -1,7 +1,8 @@
 import { generateObject } from "ai";
 import type { ModelMessage } from "ai";
 import type { z } from "zod";
-import { generationModel } from "./config";
+import { generationModel, GENERATION_MODEL_ID } from "./config";
+import { recordTokenUsage } from "@/lib/logging/token-usage";
 
 /**
  * Thin wrapper around the Vercel AI SDK's `generateObject` that every server
@@ -60,12 +61,14 @@ export async function generateValidated<T>(input: {
   system: string;
   messages?: ModelMessage[];
   prompt?: string;
+  /** Tags the token-usage record so the /usage page can break down by feature. */
+  feature?: string;
 }): Promise<GenerateResult<T>> {
   const abortSignal = AbortSignal.timeout(GENERATE_TIMEOUT_MS);
   try {
     // The SDK types require messages XOR prompt as concrete keys (not a
     // conditional spread), so branch on which the caller supplied.
-    const { object } = input.messages
+    const result = input.messages
       ? await generateObject({
           model: generationModel,
           schema: input.schema,
@@ -80,7 +83,21 @@ export async function generateValidated<T>(input: {
           prompt: input.prompt ?? "",
           abortSignal,
         });
-    return { ok: true, object };
+
+    // Record usage best-effort — never let accounting break the generation.
+    const u = result.usage;
+    await recordTokenUsage({
+      model: GENERATION_MODEL_ID,
+      feature: input.feature ?? null,
+      usage: {
+        inputTokens: u.inputTokens ?? 0,
+        outputTokens: u.outputTokens ?? 0,
+        cacheReadTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
+        cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
+      },
+    });
+
+    return { ok: true, object: result.object };
   } catch (err) {
     return { ok: false, error: friendlyMessage(err) };
   }

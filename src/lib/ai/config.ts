@@ -10,6 +10,10 @@ import { anthropic } from "@ai-sdk/anthropic";
  *
  * Requires ANTHROPIC_API_KEY in the environment (server-side only).
  */
+// The model id string, in one place. Used both to construct the provider model
+// below and to tag/price token-usage records (src/lib/ai/pricing.ts).
+export const GENERATION_MODEL_ID = "claude-opus-4-8";
+
 // Production-quality generation. (Was temporarily on claude-haiku-4-5 while
 // iterating on prompts.) Opus 4.8 is the most capable Opus-tier model.
-export const generationModel = anthropic("claude-opus-4-8");
+export const generationModel = anthropic(GENERATION_MODEL_ID);
