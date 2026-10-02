@@ -47,27 +47,29 @@ export default async function EditWorkoutPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: workout }, { data: exercises }, shoes] = await Promise.all([
-    supabase
-      .from("workouts")
-      .select(
-        "id, title, workout_type, notes, performed_at, shoe_id, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
-      )
-      .eq("id", id)
-      .single(),
-    supabase
-      .from("exercises")
-      .select("id, name, muscle_group, measurement_type")
-      .order("name"),
-    listShoesWithMileage(supabase, user.id),
-  ]);
+  const [{ data: workout }, { data: exercises }, { data: workoutTypes }, shoes] =
+    await Promise.all([
+      supabase
+        .from("workouts")
+        .select(
+          "id, title, workout_type_id, notes, performed_at, shoe_id, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
+        )
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("exercises")
+        .select("id, name, muscle_group, measurement_type")
+        .order("name"),
+      supabase.from("workout_types").select("id, name, emoji").order("name"),
+      listShoesWithMileage(supabase, user.id),
+    ]);
 
   if (!workout) notFound();
 
   const initial: InitialWorkout = {
     id: workout.id,
     title: workout.title ?? "",
-    workoutType: workout.workout_type ?? "",
+    workoutTypeId: workout.workout_type_id ?? null,
     notes: workout.notes ?? "",
     performedOn: toDateInput(workout.performed_at),
     shoeId: workout.shoe_id ?? null,
@@ -103,6 +105,7 @@ export default async function EditWorkoutPage({
         </div>
         <WorkoutForm
           catalog={(exercises as CatalogExercise[]) ?? []}
+          workoutTypes={workoutTypes ?? []}
           shoes={shoes}
           initial={initial}
         />

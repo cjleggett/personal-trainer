@@ -58,6 +58,25 @@ export async function exerciseCatalogSummary(supabase: Client): Promise<string> 
   return [`Exercises already in the catalog (${data.length}):`, ...lines].join("\n");
 }
 
+/**
+ * List the workout types the athlete can pick, with each type's emoji, so the
+ * coach knows which already exist before drafting a workout (and whether it needs
+ * to create a new one). Global catalog, so no user scoping. Parallels
+ * exerciseCatalogSummary.
+ */
+export async function workoutTypeCatalogSummary(
+  supabase: Client,
+): Promise<string> {
+  const { data } = await supabase
+    .from("workout_types")
+    .select("name, emoji")
+    .order("name", { ascending: true });
+
+  if (!data || data.length === 0) return "No workout types defined yet.";
+  const names = data.map((t) => `${t.emoji} ${t.name}`).join(", ");
+  return `Workout types already in the catalog (${data.length}): ${names}`;
+}
+
 /** Summarize the user's profile row into a short block, or a "no profile" note. */
 export async function profileSummary(
   supabase: Client,
@@ -97,7 +116,7 @@ export async function historySummary(
   const { data: workouts } = await supabase
     .from("workouts")
     .select(
-      `id, workout_type, performed_at,
+      `id, performed_at, workout_types ( name ),
        exercise_instances ( total_load, total_distance_m, total_duration_s, total_elevation_m )`,
     )
     .eq("user_id", userId)
@@ -108,7 +127,7 @@ export async function historySummary(
     return `No workouts logged in the last ${days} days.`;
   }
 
-  // Roll up by workout_type: session count + summed distance/duration/load/elev.
+  // Roll up by workout type: session count + summed distance/duration/load/elev.
   type Agg = {
     sessions: number;
     distanceM: number;
@@ -118,7 +137,8 @@ export async function historySummary(
   };
   const byType = new Map<string, Agg>();
   for (const w of workouts) {
-    const type = w.workout_type?.trim() || "Other";
+    const type =
+      (w.workout_types as { name: string } | null)?.name?.trim() || "Other";
     const agg =
       byType.get(type) ??
       { sessions: 0, distanceM: 0, durationS: 0, load: 0, elevationM: 0 };
@@ -167,7 +187,7 @@ export async function recentDetailedWorkouts(
   const { data: workouts } = await supabase
     .from("workouts")
     .select(
-      `performed_at, workout_type, title, notes,
+      `performed_at, title, notes, workout_types ( name ),
        exercise_instances ( position, sets, exercises ( name, measurement_type ) )`,
     )
     .eq("user_id", userId)
@@ -180,7 +200,8 @@ export async function recentDetailedWorkouts(
 
   const blocks = workouts.map((w) => {
     const date = w.performed_at.slice(0, 10);
-    const header = `${date} — ${w.title?.trim() || w.workout_type?.trim() || "Workout"}`;
+    const typeName = (w.workout_types as { name: string } | null)?.name?.trim();
+    const header = `${date} — ${w.title?.trim() || typeName || "Workout"}`;
 
     const instances = [...(w.exercise_instances ?? [])].sort(
       (a, b) => a.position - b.position,

@@ -9,6 +9,7 @@ import {
   KG_PER_LB,
   METERS_PER_MILE,
   METERS_PER_FOOT,
+  WORKOUT_TYPE_EMOJIS,
   type MeasurementType,
   type StoredSet,
 } from "@/lib/logging/metrics";
@@ -23,15 +24,17 @@ import {
  *     (longest run, heaviest squat, totals over a date range, …).
  *   - create_exercise — add a new exercise to the SHARED global catalog so it
  *     becomes a selectable logging option for everyone.
+ *   - create_workout_type — add a new workout type (name + emoji) to the SHARED
+ *     global catalog so it becomes a selectable type for everyone.
  *
  * SAFETY: the tools are built by `buildCoachTools(supabase, userId)` with
  * `userId` captured in a closure. The MODEL never supplies a user id — the read
- * query hardcodes `.eq("user_id", userId)`, and RLS is defense-in-depth. Both
+ * query hardcodes `.eq("user_id", userId)`, and RLS is defense-in-depth. All
  * are STRUCTURED tools (Zod-validated params we translate into Supabase calls),
- * never raw SQL. create_exercise can only INSERT a global catalog row (the one
- * write the RLS policy allows an authenticated user); it cannot touch workouts,
- * profiles, plans, or anyone's logged data, and global rows can't be edited or
- * deleted via the app.
+ * never raw SQL. create_exercise and create_workout_type can only INSERT a
+ * global catalog row (the two writes the RLS policies allow an authenticated
+ * user); they cannot touch workouts, profiles, plans, or anyone's logged data,
+ * and global rows can't be edited or deleted via the app.
  */
 
 type Client = SupabaseClient<Database>;
@@ -111,7 +114,11 @@ type Row = {
   total_elevation_m: number | null;
   sets: unknown;
   notes: string | null;
-  workouts: { performed_at: string; workout_type: string | null; title: string | null } | null;
+  workouts: {
+    performed_at: string;
+    title: string | null;
+    workout_types: { name: string } | null;
+  } | null;
   exercises: { name: string; measurement_type: MeasurementType; muscle_group: string | null } | null;
 };
 
@@ -142,7 +149,7 @@ function describeRow(row: Row) {
   }
   return {
     date: row.workouts?.performed_at?.slice(0, 10) ?? null,
-    workoutType: row.workouts?.workout_type ?? null,
+    workoutType: row.workouts?.workout_types?.name ?? null,
     title: row.workouts?.title ?? null,
     exercise: row.exercises?.name ?? null,
     metrics,
@@ -173,11 +180,26 @@ const createExerciseParams = z.object({
     .describe("Primary equipment, e.g. 'barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'none'. Null if unclear."),
 });
 
+/** Parameters for creating a workout type. The emoji drives the history icon, so
+ * the coach must pick one from the curated activity set. */
+const createWorkoutTypeParams = z.object({
+  name: z
+    .string()
+    .min(1)
+    .describe("Workout type name in title case, e.g. 'Pilates', 'Trail Run', 'CrossFit'."),
+  emoji: z
+    .string()
+    .min(1)
+    .describe(
+      `A single activity emoji representing the type. Choose from: ${WORKOUT_TYPE_EMOJIS.join(" ")}.`,
+    ),
+});
+
 /**
  * Build the coach's tool set, scoped to the signed-in user. `userId` is baked in
- * here so read tools can't widen their scope. The catalog is a SHARED global
- * resource: create_exercise adds a global exercise everyone can use (owner_id
- * null), which the RLS policy permits for any authenticated user.
+ * here so read tools can't widen their scope. The catalogs are SHARED global
+ * resources: create_exercise and create_workout_type add global rows everyone
+ * can use, which the RLS policies permit for any authenticated user.
  */
 export function buildCoachTools(supabase: Client, userId: string): ToolSet {
   return {
@@ -236,6 +258,56 @@ export function buildCoachTools(supabase: Client, userId: string): ToolSet {
         return { created: true, reused: false, exercise: created };
       },
     }),
+    create_workout_type: tool({
+      description:
+        "Add a new workout type to the shared catalog so it becomes a selectable type when logging — for EVERYONE. Use this when you draft a workout whose activity type isn't already in the list of existing types above. You MUST pick an emoji (it's shown as the type's icon in the athlete's history). If a type with the same name already exists, this reuses it instead of duplicating.",
+      inputSchema: createWorkoutTypeParams,
+      execute: async (params) => {
+        const name = params.name.trim();
+        const emoji = params.emoji.trim();
+        if (!name) return { error: "Workout type name is required." };
+        if (!emoji) return { error: "An emoji is required." };
+
+        // Reuse an existing type by case-insensitive name rather than duplicating
+        // (also backstopped by the unique index).
+        const { data: existing } = await supabase
+          .from("workout_types")
+          .select("id, name, emoji")
+          .ilike("name", name)
+          .limit(1)
+          .maybeSingle();
+        if (existing) {
+          return {
+            created: false,
+            reused: true,
+            workoutType: existing,
+            note: "A workout type with this name already exists; reusing it.",
+          };
+        }
+
+        const { data: created, error } = await supabase
+          .from("workout_types")
+          .insert({ name, emoji })
+          .select("id, name, emoji")
+          .single();
+
+        if (error) {
+          // A race on the unique index surfaces here; re-fetch and reuse.
+          const { data: raced } = await supabase
+            .from("workout_types")
+            .select("id, name, emoji")
+            .ilike("name", name)
+            .limit(1)
+            .maybeSingle();
+          if (raced) {
+            return { created: false, reused: true, workoutType: raced };
+          }
+          return { error: `Couldn't create the workout type: ${error.message}` };
+        }
+
+        return { created: true, reused: false, workoutType: created };
+      },
+    }),
     query_training_history: tool({
       description:
         "Search the athlete's OWN logged workout history to answer specific questions the provided summaries don't cover — e.g. their longest run ever, heaviest squat, total mileage in a date range, or how many times they did an exercise. Read-only; only ever returns this athlete's data. Prefer this over guessing when asked about a specific past number.",
@@ -245,11 +317,17 @@ export function buildCoachTools(supabase: Client, userId: string): ToolSet {
         // (for date/type/title) and the exercise catalog (name/type/muscle).
         // `!inner` so type/name/muscle filters actually restrict results. RLS +
         // the explicit user_id filter both scope this to the current athlete.
+        // Inner-join workout_types only when filtering on it, so a type filter
+        // actually restricts results (and a workout with no type isn't dropped
+        // from unfiltered queries).
+        const typesJoin = params.workoutType
+          ? "workout_types!inner ( name )"
+          : "workout_types ( name )";
         let query = supabase
           .from("exercise_instances")
           .select(
             `total_load, total_distance_m, total_duration_s, total_elevation_m, sets, notes,
-             workouts!inner ( performed_at, workout_type, title ),
+             workouts!inner ( performed_at, title, ${typesJoin} ),
              exercises!inner ( name, measurement_type, muscle_group )`,
           )
           .eq("user_id", userId);
@@ -258,7 +336,10 @@ export function buildCoachTools(supabase: Client, userId: string): ToolSet {
           query = query.ilike("exercises.name", `%${params.exerciseName}%`);
         }
         if (params.workoutType) {
-          query = query.ilike("workouts.workout_type", `%${params.workoutType}%`);
+          query = query.ilike(
+            "workouts.workout_types.name",
+            `%${params.workoutType}%`,
+          );
         }
         if (params.muscleGroup) {
           query = query.ilike("exercises.muscle_group", `%${params.muscleGroup}%`);

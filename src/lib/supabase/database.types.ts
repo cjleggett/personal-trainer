@@ -276,6 +276,27 @@ export type Database = {
         }
         Relationships: []
       }
+      workout_types: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       workouts: {
         Row: {
           created_at: string
@@ -288,7 +309,7 @@ export type Database = {
           shoe_id: string | null
           title: string | null
           user_id: string
-          workout_type: string | null
+          workout_type_id: string | null
         }
         Insert: {
           created_at?: string
@@ -301,7 +322,7 @@ export type Database = {
           shoe_id?: string | null
           title?: string | null
           user_id: string
-          workout_type?: string | null
+          workout_type_id?: string | null
         }
         Update: {
           created_at?: string
@@ -314,7 +335,7 @@ export type Database = {
           shoe_id?: string | null
           title?: string | null
           user_id?: string
-          workout_type?: string | null
+          workout_type_id?: string | null
         }
         Relationships: [
           {
@@ -330,6 +351,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "shoes"
             referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "workouts_workout_type_id_fkey"
+            columns: ["workout_type_id"]
+            isOneToOne: false
+            referencedRelation: "workout_types"
+            referencedColumns: ["id"]
           },
         ]
       }
