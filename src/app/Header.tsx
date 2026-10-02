@@ -20,6 +20,7 @@ const NAV = [
   { href: "/dashboard", label: "Home" },
   { href: "/workouts", label: "Workout History" },
   { href: "/plan", label: "Plan" },
+  { href: "/about-app", label: "About" },
 ] as const;
 
 // Account pages, tucked under the avatar dropdown.
