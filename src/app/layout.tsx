@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Momentum",
+  title: "MomentumFitness",
   description:
     "Create training plans, generate workouts, and log your training.",
 };
