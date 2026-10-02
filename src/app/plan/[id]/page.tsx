@@ -134,7 +134,7 @@ export default async function PlanDetailPage({
           </p>
         </header>
 
-        <EditPlanChat planId={id} />
+        <EditPlanChat planId={id} userId={user.id} />
 
         <PlanOverview weeks={plan.weeks} />
 

@@ -231,7 +231,7 @@ export default async function DashboardPage() {
           </StatCard>
         </section>
 
-        <CoachChat />
+        <CoachChat userId={user.id} />
 
         {parsed?.success && planRow && (
           <section className="flex flex-col gap-4">

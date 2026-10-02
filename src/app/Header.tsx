@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signout } from "@/app/login/actions";
+import { clearChatStorage } from "@/lib/coach/chat-storage";
 
 /**
  * The shared Momentum top bar: brand, primary nav with active-route highlight,
@@ -139,6 +140,9 @@ export function Header({ email }: { email?: string | null }) {
               <button
                 type="submit"
                 role="menuitem"
+                // Sign-out is a server action and can't touch localStorage, so
+                // sweep the client-persisted coach/plan chats here before it runs.
+                onClick={clearChatStorage}
                 className="block w-full px-3 py-2 text-left text-sm text-rust transition-colors hover:bg-rust-soft"
               >
                 Sign out

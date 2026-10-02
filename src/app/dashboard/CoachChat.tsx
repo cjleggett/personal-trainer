@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { ModelMessage } from "ai";
 import type { WorkoutDraft } from "@/lib/ai/schemas";
 import { startCoach, continueCoach, type CoachResult } from "./coach-actions";
+import { coachChatKey } from "@/lib/coach/chat-storage";
 
 /**
  * The dashboard coach: a general chat where the user can ask questions, report
@@ -27,15 +28,16 @@ type Bubble =
  * turn), so a refresh would otherwise wipe it. We persist the conversation to
  * localStorage — both the server `messages` transcript (needed to continue the
  * thread) and the display `chat` bubbles — and restore it on mount.
+ *
+ * The storage key is scoped to the signed-in user (see chat-storage). It MUST
+ * be: a shared browser would otherwise restore the previous user's transcript.
  */
-const STORAGE_KEY = "coach-chat-v1";
-
 type PersistedChat = { messages: ModelMessage[]; chat: Bubble[] };
 
-function loadPersisted(): PersistedChat | null {
+function loadPersisted(storageKey: string): PersistedChat | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedChat;
     if (!Array.isArray(parsed.messages) || !Array.isArray(parsed.chat)) return null;
@@ -63,8 +65,9 @@ function draftHref(draft: WorkoutDraft): string {
   return `/workouts/new?${params.toString()}`;
 }
 
-export function CoachChat() {
+export function CoachChat({ userId }: { userId: string }) {
   const router = useRouter();
+  const storageKey = coachChatKey(userId);
   const [messages, setMessages] = useState<ModelMessage[]>([]);
   const [chat, setChat] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -81,7 +84,7 @@ export function CoachChat() {
   // syncing an external store that isn't available during SSR.
   const [restored, setRestored] = useState(false);
   useEffect(() => {
-    const saved = loadPersisted();
+    const saved = loadPersisted(storageKey);
     if (saved && saved.chat.length > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage on mount
       setMessages(saved.messages);
@@ -89,18 +92,18 @@ export function CoachChat() {
       setStarted(saved.messages.length > 0);
     }
     setRestored(true);
-  }, []);
+  }, [storageKey]);
 
   // Persist after every change, once we've restored. An empty conversation
   // clears the key (used by the Clear button and a fresh start).
   useEffect(() => {
     if (!restored || typeof window === "undefined") return;
     if (chat.length === 0) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(storageKey);
     } else {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, chat }));
+      window.localStorage.setItem(storageKey, JSON.stringify({ messages, chat }));
     }
-  }, [restored, messages, chat]);
+  }, [restored, storageKey, messages, chat]);
 
   // Scroll the message list (not the page) to the bottom as it grows. Only
   // auto-follow when the user is already near the bottom, so scrolling up to
