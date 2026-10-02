@@ -264,6 +264,16 @@ export async function generatePlan(
   // this returns the skeleton unchanged, so it never blocks saving the plan.
   const plan = await enrichPlan(supabase, user.id, now, generated.object);
 
+  // Only one plan is active at a time. Archive any existing active plans before
+  // inserting the new one, so generating a fresh plan cleanly supersedes the old
+  // one (rather than leaving orphaned 'active' rows shadowed by date ordering).
+  // Editing an existing plan updates it in place and never comes through here.
+  await supabase
+    .from("training_plans")
+    .update({ status: "archived" })
+    .eq("user_id", user.id)
+    .eq("status", "active"); // RLS also scopes to the owner
+
   const { data: row, error } = await supabase
     .from("training_plans")
     .insert({

@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/schemas";
 import { dateForSlot } from "@/lib/logging/plan-dates";
 import { DeletePlanButton } from "./DeletePlanButton";
+import { EditPlanChat } from "./EditPlanChat";
 
 function formatDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, {
@@ -132,6 +133,8 @@ export default async function PlanDetailPage({
             {row.target_date ? ` · goal ${formatDate(row.target_date)}` : ""}
           </p>
         </header>
+
+        <EditPlanChat planId={id} />
 
         <PlanOverview weeks={plan.weeks} />
 
