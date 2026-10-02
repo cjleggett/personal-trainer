@@ -1,13 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { login, signup } from "./actions";
 
-type FormState = { error?: string; message?: string } | null;
+type FormState = { error?: string; message?: string; email?: string } | null;
 
 const initialState: FormState = null;
 
+type Mode = "signin" | "signup";
+
 export default function LoginPage() {
+  const [mode, setMode] = useState<Mode>("signin");
   const [loginState, loginAction, loginPending] = useActionState<
     FormState,
     FormData
@@ -16,6 +19,10 @@ export default function LoginPage() {
     FormState,
     FormData
   >(signup, initialState);
+
+  const isSignup = mode === "signup";
+  const activeState = isSignup ? signupState : loginState;
+  const pending = loginPending || signupPending;
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center p-6">
@@ -52,11 +59,16 @@ export default function LoginPage() {
             <h1 className="font-serif text-3xl font-semibold tracking-tight">
               MomentumFitness
             </h1>
-            <p className="text-sm text-muted">Sign in or create an account.</p>
+            <p className="text-sm text-muted">
+              {isSignup ? "Create an account." : "Sign in to continue."}
+            </p>
           </div>
         </div>
 
-        <form className="space-y-3 rounded-2xl border border-line bg-surface p-6 shadow-[0_2px_10px_rgba(43,38,32,0.04)]">
+        <form
+          action={isSignup ? signupAction : loginAction}
+          className="space-y-3 rounded-2xl border border-line bg-surface p-6 shadow-[0_2px_10px_rgba(43,38,32,0.04)]"
+        >
           <label className="block space-y-1.5">
             <span className="text-sm font-medium">Email</span>
             <input
@@ -64,6 +76,8 @@ export default function LoginPage() {
               name="email"
               required
               autoComplete="email"
+              // Repopulate the email after a failed submit so it isn't wiped.
+              defaultValue={activeState?.email ?? ""}
               className="w-full rounded-xl border border-line-strong bg-paper px-3 py-2 text-base text-ink focus:border-rust focus:outline-none"
             />
           </label>
@@ -73,40 +87,57 @@ export default function LoginPage() {
               type="password"
               name="password"
               required
-              autoComplete="current-password"
+              autoComplete={isSignup ? "new-password" : "current-password"}
               minLength={6}
               className="w-full rounded-xl border border-line-strong bg-paper px-3 py-2 text-base text-ink focus:border-rust focus:outline-none"
             />
           </label>
+          {isSignup && (
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">Confirm password</span>
+              <input
+                type="password"
+                name="confirm_password"
+                required
+                autoComplete="new-password"
+                minLength={6}
+                className="w-full rounded-xl border border-line-strong bg-paper px-3 py-2 text-base text-ink focus:border-rust focus:outline-none"
+              />
+            </label>
+          )}
 
-          {(loginState?.error || signupState?.error) && (
-            <p className="text-sm text-rust">
-              {loginState?.error ?? signupState?.error}
-            </p>
+          {activeState?.error && (
+            <p className="text-sm text-rust">{activeState.error}</p>
           )}
           {signupState?.message && (
             <p className="text-sm text-good">{signupState.message}</p>
           )}
 
-          <div className="flex gap-2 pt-1">
-            <button
-              type="submit"
-              formAction={loginAction}
-              disabled={loginPending || signupPending}
-              className="flex-1 rounded-full bg-rust px-4 py-2 text-sm font-medium text-on-rust disabled:opacity-50"
-            >
-              {loginPending ? "Signing in…" : "Sign in"}
-            </button>
-            <button
-              type="submit"
-              formAction={signupAction}
-              disabled={loginPending || signupPending}
-              className="flex-1 rounded-full border border-line-strong px-4 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              {signupPending ? "Creating…" : "Sign up"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={pending}
+            className="w-full rounded-full bg-rust px-4 py-2 text-sm font-medium text-on-rust disabled:opacity-50"
+          >
+            {isSignup
+              ? signupPending
+                ? "Creating…"
+                : "Sign up"
+              : loginPending
+                ? "Signing in…"
+                : "Sign in"}
+          </button>
         </form>
+
+        <p className="text-center text-sm text-muted">
+          {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
+          <button
+            type="button"
+            onClick={() => setMode(isSignup ? "signin" : "signup")}
+            className="font-medium text-rust underline-offset-2 hover:underline"
+          >
+            {isSignup ? "Sign in" : "Sign up"}
+          </button>
+        </p>
       </div>
     </main>
   );
