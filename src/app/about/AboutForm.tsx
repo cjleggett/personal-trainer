@@ -24,8 +24,8 @@ export function AboutForm({
     <form action={formAction} className="flex flex-col gap-6">
       <section className="space-y-2">
         <div>
-          <h2 className="text-lg font-semibold">About me</h2>
-          <p className="text-sm text-zinc-500">
+          <h2 className="font-serif text-xl font-semibold">About me</h2>
+          <p className="text-sm text-muted">
             Anything you want your coach to know about you. Only you edit this —
             the coach reads it but won&apos;t change it.
           </p>
@@ -35,14 +35,14 @@ export function AboutForm({
           defaultValue={aboutMe}
           rows={6}
           placeholder="e.g. I'm a 32-year-old former soccer player getting back into shape after an ACL repair. I train best in the mornings and travel often for work."
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
         />
       </section>
 
       <section className="space-y-2">
         <div>
-          <h2 className="text-lg font-semibold">Coach notes</h2>
-          <p className="text-sm text-zinc-500">
+          <h2 className="font-serif text-xl font-semibold">Coach notes</h2>
+          <p className="text-sm text-muted">
             Durable things your coach has picked up over time. The coach updates
             this automatically as it learns — you can edit or clear it here too.
           </p>
@@ -52,21 +52,17 @@ export function AboutForm({
           defaultValue={coachNotes}
           rows={6}
           placeholder="e.g. Dislikes burpees. Prefers trail runs. Has a standing soccer game Tuesdays."
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
         />
       </section>
 
-      {state && !state.ok && (
-        <p className="text-sm text-red-600">{state.error}</p>
-      )}
-      {state?.ok && (
-        <p className="text-sm text-green-600">Saved.</p>
-      )}
+      {state && !state.ok && <p className="text-sm text-rust">{state.error}</p>}
+      {state?.ok && <p className="text-sm text-good">Saved.</p>}
 
       <button
         type="submit"
         disabled={isPending}
-        className="w-fit rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
+        className="w-fit rounded-full bg-rust px-5 py-2 text-sm font-medium text-on-rust disabled:opacity-50"
       >
         {isPending ? "Saving…" : "Save"}
       </button>

@@ -31,11 +31,11 @@ export function DeletePlanButton({ planId }: { planId: string }) {
       <button
         onClick={onDelete}
         disabled={isPending}
-        className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
+        className="text-sm font-medium text-rust hover:underline disabled:opacity-50"
       >
         {isPending ? "Deleting…" : "Delete plan"}
       </button>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-rust">{error}</p>}
     </div>
   );
 }

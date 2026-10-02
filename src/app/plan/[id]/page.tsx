@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Header } from "@/app/Header";
 import {
   trainingPlanSchema,
   type TrainingPlan,
@@ -34,39 +35,36 @@ function PlanOverview({ weeks }: { weeks: PlanWeek[] }) {
   if (columns.length === 0) return null;
 
   return (
-    <section className="space-y-2">
-      <h2 className="text-lg font-semibold">Overview</h2>
-      <div className="overflow-x-auto rounded-md border border-zinc-200 dark:border-zinc-800">
+    <section className="space-y-3">
+      <h2 className="font-serif text-2xl font-semibold">Overview</h2>
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 text-left text-zinc-500 dark:border-zinc-800">
-              <th className="px-4 py-2 font-medium">Week</th>
+            <tr className="border-b border-line text-left text-faint">
+              <th className="px-4 py-2.5 font-medium">Week</th>
               {columns.map((label) => (
-                <th key={label} className="px-4 py-2 font-medium">
+                <th key={label} className="px-4 py-2.5 font-medium">
                   {label}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+          <tbody className="divide-y divide-line">
             {weeks.map((week) => {
               const byLabel = new Map(week.metrics.map((m) => [m.label, m.value]));
               return (
                 <tr key={week.weekNumber}>
                   <th
                     scope="row"
-                    className="whitespace-nowrap px-4 py-2 text-left font-medium"
+                    className="whitespace-nowrap px-4 py-2.5 text-left font-medium"
                   >
                     {week.weekNumber}
-                    <span className="ml-2 font-normal text-zinc-500">
+                    <span className="ml-2 font-serif font-normal italic text-faint">
                       {week.phase}
                     </span>
                   </th>
                   {columns.map((label) => (
-                    <td
-                      key={label}
-                      className="px-4 py-2 text-zinc-600 dark:text-zinc-400"
-                    >
+                    <td key={label} className="px-4 py-2.5 text-muted">
                       {byLabel.get(label) ?? "—"}
                     </td>
                   ))}
@@ -103,75 +101,92 @@ export default async function PlanDetailPage({
   const parsed = trainingPlanSchema.safeParse(row.plan);
   if (!parsed.success) {
     return (
-      <main className="mx-auto w-full max-w-2xl flex-1 p-4 sm:p-6">
-        <p className="text-sm text-red-600">This plan&apos;s data is malformed.</p>
-      </main>
+      <>
+        <Header email={user.email} />
+        <main className="mx-auto w-full max-w-2xl flex-1 p-5 sm:p-8">
+          <p className="text-sm text-rust">This plan&apos;s data is malformed.</p>
+        </main>
+      </>
     );
   }
   const plan: TrainingPlan = parsed.data;
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
-      <header className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">{row.name}</h1>
-        <Link
-          href="/dashboard"
-          className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium dark:border-zinc-700"
-        >
-          Done
+    <>
+      <Header email={user.email} />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-5 sm:p-8">
+        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">
+          ← Back to dashboard
         </Link>
-      </header>
 
-      <p className="text-zinc-600 dark:text-zinc-400">{plan.summary}</p>
-      <p className="text-sm text-zinc-500">
-        Starts {formatDate(row.start_date)}
-        {row.target_date ? ` · goal ${formatDate(row.target_date)}` : ""}
-      </p>
+        <header>
+          <p className="text-sm font-semibold uppercase tracking-[0.12em] text-rust">
+            Training plan
+          </p>
+          <h1 className="mt-2 font-serif text-4xl font-semibold tracking-tight">
+            {row.name}
+          </h1>
+          <p className="mt-3 text-muted">{plan.summary}</p>
+          <p className="mt-1 text-sm text-faint">
+            Starts {formatDate(row.start_date)}
+            {row.target_date ? ` · goal ${formatDate(row.target_date)}` : ""}
+          </p>
+        </header>
 
-      <PlanOverview weeks={plan.weeks} />
+        <PlanOverview weeks={plan.weeks} />
 
-      <div className="flex flex-col gap-6">
-        {plan.weeks.map((week) => (
-          <section key={week.weekNumber} className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-lg font-semibold">
-                Week {week.weekNumber} · {week.phase}
-              </h2>
-            </div>
-            <p className="text-sm text-zinc-500">{week.emphasis}</p>
-            <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-              {week.days.map((day, dayIdx) => {
-                const date = dateForSlot(row.start_date, week.weekNumber, dayIdx);
-                return (
-                  <li
-                    key={dayIdx}
-                    className={`flex items-start justify-between gap-4 px-4 py-3 ${
-                      day.isRestDay ? "text-zinc-400 dark:text-zinc-500" : ""
-                    }`}
-                  >
-                    <div className="min-w-0">
+        <div className="flex flex-col gap-8">
+          {plan.weeks.map((week) => (
+            <section key={week.weekNumber} className="space-y-3">
+              <div>
+                <h2 className="font-serif text-2xl font-semibold">
+                  Week {week.weekNumber}{" "}
+                  <span className="italic text-faint">· {week.phase}</span>
+                </h2>
+                <p className="mt-0.5 text-sm text-muted">{week.emphasis}</p>
+              </div>
+              <ol className="flex flex-col border-l-2 border-line pl-6">
+                {week.days.map((day, dayIdx) => {
+                  const date = dateForSlot(
+                    row.start_date,
+                    week.weekNumber,
+                    dayIdx,
+                  );
+                  return (
+                    <li
+                      key={dayIdx}
+                      className={`relative border-b border-line py-3 last:border-b-0 ${
+                        day.isRestDay ? "opacity-60" : ""
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className={`absolute -left-[1.9rem] top-5 size-[11px] rounded-full border-2 border-paper ${
+                          day.isRestDay ? "bg-faint" : "bg-rust"
+                        }`}
+                      />
                       <p className="text-sm font-medium">
-                        {formatDate(date)} · {day.focus}
+                        <span className="font-serif">{formatDate(date)}</span> ·{" "}
+                        {day.focus}
                       </p>
-                      <p className="text-sm text-zinc-500">{day.target}</p>
+                      {day.target && (
+                        <p className="text-sm text-muted">{day.target}</p>
+                      )}
                       {day.exercises.length > 0 && (
                         <ul className="mt-1.5 space-y-0.5">
                           {day.exercises.map((ex, exIdx) => (
                             <li
                               key={exIdx}
-                              className="flex justify-between gap-3 text-sm text-zinc-500"
+                              className="flex justify-between gap-3 text-sm text-muted"
                             >
                               <span>
                                 {ex.name}
                                 {ex.notes ? (
-                                  <span className="text-zinc-400">
-                                    {" "}
-                                    — {ex.notes}
-                                  </span>
+                                  <span className="text-faint"> — {ex.notes}</span>
                                 ) : null}
                               </span>
                               {ex.target && (
-                                <span className="shrink-0 text-zinc-400">
+                                <span className="shrink-0 text-faint">
                                   {ex.target}
                                 </span>
                               )}
@@ -179,18 +194,18 @@ export default async function PlanDetailPage({
                           ))}
                         </ul>
                       )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
-      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
 
-      <div className="mt-2 flex justify-end border-t border-zinc-200 pt-4 dark:border-zinc-800">
-        <DeletePlanButton planId={id} />
-      </div>
-    </main>
+        <div className="mt-2 flex justify-end border-t border-line pt-4">
+          <DeletePlanButton planId={id} />
+        </div>
+      </main>
+    </>
   );
 }

@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
+/*
+ * Momentum design tokens. A warm "paper" palette (light) with a warm-charcoal
+ * dark variant, switched by prefers-color-scheme. Everything downstream uses the
+ * semantic utilities generated below (bg-surface, text-muted, border-line, …)
+ * so a single edit here re-themes the whole app.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --paper: #f6f1e9; /* app background */
+  --surface: #fdfaf4; /* cards, panels, inputs */
+  --ink: #2b2620; /* primary text */
+  --muted: #6f685d; /* secondary text */
+  --faint: #a39a8b; /* tertiary text, placeholders */
+  --line: #e4dccf; /* hairline borders */
+  --line-strong: #d4c9b6; /* input borders, dividers */
+  --rust: #b5543a; /* primary accent / brand */
+  --rust-soft: #f3e2db; /* accent tint (coach bubbles, chips) */
+  --olive: #6a7049; /* secondary accent */
+  --good: #5c7a4a; /* success / logged */
+  --good-bg: #e9eedd; /* success tint */
+  --on-rust: #ffffff; /* text on rust fills */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #1a1713;
+    --surface: #231f1a;
+    --ink: #ede6da;
+    --muted: #a89f90;
+    --faint: #7d7467;
+    --line: #352f28;
+    --line-strong: #473e34;
+    --rust: #d47a5f;
+    --rust-soft: #3a2a22;
+    --olive: #9aa06f;
+    --good: #8fae6f;
+    --good-bg: #272f1d;
+    --on-rust: #1a1713;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-rust: var(--rust);
+  --color-rust-soft: var(--rust-soft);
+  --color-olive: var(--olive);
+  --color-good: var(--good);
+  --color-good-bg: var(--good-bg);
+  --color-on-rust: var(--on-rust);
+
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-fraunces);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Keep the native form controls and scrollbars in step with the theme. */
+:root {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  line-height: 1.55;
 }

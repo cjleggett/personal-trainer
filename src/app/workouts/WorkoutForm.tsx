@@ -320,7 +320,7 @@ export function WorkoutForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <label className="block space-y-1">
+      <label className="block space-y-1.5">
         <span className="text-sm font-medium">Workout type</span>
         <Combobox
           options={WORKOUT_TYPE_PRESETS.map((t) => ({ value: t, label: t }))}
@@ -332,19 +332,19 @@ export function WorkoutForm({
       </label>
 
       <div className="flex gap-3">
-        <label className="flex-1 space-y-1">
+        <label className="flex-1 space-y-1.5">
           <span className="text-sm font-medium">Date</span>
           <input
             type="date"
             value={performedOn}
             max={todayIso()}
             onChange={(e) => setPerformedOn(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink focus:border-rust focus:outline-none"
           />
         </label>
       </div>
 
-      <label className="block space-y-1">
+      <label className="block space-y-1.5">
         <span className="text-sm font-medium">Title (optional)</span>
         <input
           value={title}
@@ -353,18 +353,18 @@ export function WorkoutForm({
             setTitleEdited(true);
           }}
           placeholder={autoTitle || "Auto-filled from date + type"}
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
         />
       </label>
 
       {/* Shoes: running workouts only, always optional. */}
       {isRunningType(workoutType) && (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <span className="text-sm font-medium">Shoes (optional)</span>
           <select
             value={shoeId}
             onChange={(e) => setShoeId(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink focus:border-rust focus:outline-none"
           >
             <option value="">No shoes</option>
             {shoes.map((s) => (
@@ -378,16 +378,16 @@ export function WorkoutForm({
           {shoeId === NEW_SHOE && (
             <div className="flex flex-wrap gap-2 pt-1">
               <label className="flex-1 space-y-0.5">
-                <span className="text-xs text-zinc-500">Name</span>
+                <span className="text-xs text-faint">Name</span>
                 <input
                   value={newShoeName}
                   onChange={(e) => setNewShoeName(e.target.value)}
                   placeholder="e.g. Nike Pegasus 40"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                  className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
                 />
               </label>
               <label className="w-32 space-y-0.5">
-                <span className="text-xs text-zinc-500">Starting mileage (mi)</span>
+                <span className="text-xs text-faint">Starting mileage (mi)</span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -396,7 +396,7 @@ export function WorkoutForm({
                   value={newShoeStartMi}
                   onChange={(e) => setNewShoeStartMi(e.target.value)}
                   placeholder="0"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                  className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
                 />
               </label>
             </div>
@@ -417,9 +417,9 @@ export function WorkoutForm({
         />
       ))}
 
-      <div className="space-y-1">
+      <div className="space-y-1.5 rounded-2xl border border-dashed border-line-strong p-5">
         <span className="text-sm font-medium">
-          {instances.length > 0 ? "Add another exercise" : "Add exercise"}
+          {instances.length > 0 ? "Add another exercise" : "Add an exercise"}
         </span>
         <Combobox
           options={exerciseOptions}
@@ -429,24 +429,24 @@ export function WorkoutForm({
         />
       </div>
 
-      <label className="block space-y-1">
+      <label className="block space-y-1.5">
         <span className="text-sm font-medium">Notes (optional)</span>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
           placeholder="How the session felt, conditions, anything worth remembering…"
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-rust">{error}</p>}
 
-      <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-md sm:border dark:border-zinc-800 dark:bg-zinc-950/90">
+      <div className="sticky bottom-0 -mx-5 flex flex-col gap-2 border-t border-line bg-paper/90 px-5 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border">
         <button
           onClick={handleSave}
           disabled={isPending || instances.length === 0}
-          className="w-full rounded-md bg-zinc-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
+          className="w-full rounded-full bg-rust px-4 py-3 text-base font-medium text-on-rust disabled:opacity-50"
         >
           {isPending ? "Saving…" : editing ? "Save changes" : "Save workout"}
         </button>
@@ -454,14 +454,14 @@ export function WorkoutForm({
           <div className="flex justify-between text-sm">
             <button
               onClick={() => router.push(`/workouts/${initial!.id}`)}
-              className="text-zinc-500 hover:underline"
+              className="text-muted hover:text-ink"
             >
               Cancel
             </button>
             <button
               onClick={handleDelete}
               disabled={isPending}
-              className="text-red-600 hover:underline disabled:opacity-50"
+              className="text-rust hover:underline disabled:opacity-50"
             >
               Delete workout
             </button>
@@ -496,12 +496,14 @@ function InstanceCard({
   const hasOptional = allFields.some((f) => f.optional);
 
   return (
-    <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <section className="rounded-2xl border border-line bg-surface p-5 shadow-[0_2px_10px_rgba(43,38,32,0.04)]">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-medium">{instance.exercise.name}</h2>
+        <h2 className="font-serif text-lg font-semibold">
+          {instance.exercise.name}
+        </h2>
         <button
           onClick={() => onRemove(instance.uid)}
-          className="text-sm text-zinc-500 hover:text-red-600"
+          className="text-sm text-faint hover:text-rust"
         >
           Remove
         </button>
@@ -524,7 +526,7 @@ function InstanceCard({
               />
             ))}
             <label className="w-16 space-y-0.5">
-              <span className="text-xs text-zinc-500">Sets</span>
+              <span className="text-xs text-faint">Sets</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -532,13 +534,13 @@ function InstanceCard({
                 step={1}
                 value={group.count}
                 onChange={(e) => onUpdateCount(instance.uid, gi, e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-2 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                className="w-full rounded-xl border border-line-strong bg-paper px-2 py-2 text-base text-ink focus:border-rust focus:outline-none"
               />
             </label>
             {instance.groups.length > 1 && (
               <button
                 onClick={() => onRemoveGroup(instance.uid, gi)}
-                className="self-end pb-2 text-sm text-zinc-400 hover:text-red-600"
+                className="self-end pb-2 text-sm text-faint hover:text-rust"
                 aria-label="Remove row"
                 title="Remove row"
               >
@@ -552,14 +554,14 @@ function InstanceCard({
       <div className="mt-3 flex gap-4">
         <button
           onClick={() => onAddGroup(instance.uid)}
-          className="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
+          className="text-sm font-medium text-rust hover:underline"
         >
           + Add another set/row
         </button>
         {hasOptional && (
           <button
             onClick={() => onToggleOptional(instance.uid)}
-            className="text-sm text-zinc-500 hover:underline"
+            className="text-sm text-muted hover:underline"
           >
             {instance.showOptional ? "− Fewer fields" : "+ More fields"}
           </button>
@@ -596,10 +598,10 @@ function MetricInput({
     const digits = (s: string) => s.replace(/\D/g, "");
     const commit = (m: string, s: string) => onChange(minSecToMinutes(m, s));
     const timeInput =
-      "w-10 rounded-md border border-zinc-300 px-1.5 py-2 text-center text-base tabular-nums dark:border-zinc-700 dark:bg-zinc-900";
+      "w-10 rounded-xl border border-line-strong bg-paper px-1.5 py-2 text-center text-base tabular-nums text-ink focus:border-rust focus:outline-none";
     return (
       <div className="space-y-0.5">
-        <span className="text-xs text-zinc-500">{labelText}</span>
+        <span className="text-xs text-faint">{labelText}</span>
         <div className="flex items-start gap-1">
           <div className="flex flex-col items-center">
             <input
@@ -611,14 +613,11 @@ function MetricInput({
               onChange={(e) => commit(digits(e.target.value), sec)}
               className={timeInput}
             />
-            <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+            <span className="text-[10px] uppercase tracking-wide text-faint">
               MM
             </span>
           </div>
-          <span
-            aria-hidden
-            className="pt-2 text-base font-medium text-zinc-500"
-          >
+          <span aria-hidden className="pt-2 text-base font-medium text-muted">
             :
           </span>
           <div className="flex flex-col items-center">
@@ -631,7 +630,7 @@ function MetricInput({
               onChange={(e) => commit(min, digits(e.target.value))}
               className={timeInput}
             />
-            <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+            <span className="text-[10px] uppercase tracking-wide text-faint">
               SS
             </span>
           </div>
@@ -642,7 +641,7 @@ function MetricInput({
 
   return (
     <label className="flex-1 space-y-0.5">
-      <span className="text-xs text-zinc-500">
+      <span className="text-xs text-faint">
         {field.label}
         {field.unit ? ` (${field.unit})` : ""}
         {field.optional ? "" : " *"}
@@ -653,7 +652,7 @@ function MetricInput({
         step={field.step}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-zinc-300 px-2 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+        className="w-full rounded-xl border border-line-strong bg-paper px-2 py-2 text-base text-ink focus:border-rust focus:outline-none"
       />
     </label>
   );

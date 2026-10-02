@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Header } from "@/app/Header";
 import {
   METRIC_FIELDS,
   collapseSets,
@@ -86,21 +87,26 @@ export default async function EditWorkoutPage({
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Edit workout</h1>
-        <Link
-          href={`/workouts/${workout.id}`}
-          className="text-sm text-zinc-500 hover:underline"
-        >
-          Cancel
-        </Link>
-      </header>
-      <WorkoutForm
-        catalog={(exercises as CatalogExercise[]) ?? []}
-        shoes={shoes}
-        initial={initial}
-      />
-    </main>
+    <>
+      <Header email={user.email} />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-5 sm:p-8">
+        <div>
+          <Link
+            href={`/workouts/${workout.id}`}
+            className="text-sm text-muted hover:text-ink"
+          >
+            ← Back to workout
+          </Link>
+          <h1 className="mt-4 font-serif text-4xl font-semibold tracking-tight">
+            Edit workout
+          </h1>
+        </div>
+        <WorkoutForm
+          catalog={(exercises as CatalogExercise[]) ?? []}
+          shoes={shoes}
+          initial={initial}
+        />
+      </main>
+    </>
   );
 }

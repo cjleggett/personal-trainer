@@ -2,18 +2,46 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { signout } from "@/app/login/actions";
+import { Header } from "@/app/Header";
 import { trainingPlanSchema } from "@/lib/ai/schemas";
 import {
+  addDays,
   dateForSlot,
   relativeDayLabel,
   todayInTimeZone,
+  weekdayOf,
 } from "@/lib/logging/plan-dates";
 import { CoachChat } from "./CoachChat";
 import { TimezoneSync } from "./TimezoneSync";
 
 /** How many upcoming plan days to surface on the dashboard. */
 const UPCOMING_COUNT = 4;
+
+/** Sunday-based weekday index, to find the Monday that starts "this week". */
+const SUNDAY_INDEX: Record<string, number> = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
+
+/** The Monday on or before `today` (start of the current Mon→Sun week). */
+function weekStartMonday(today: string): string {
+  const dow = SUNDAY_INDEX[weekdayOf(today)];
+  return addDays(today, -((dow + 6) % 7));
+}
+
+/** Format a timestamp to a YYYY-MM-DD calendar date in the user's zone. */
+function localDate(ts: string, timeZone?: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(ts));
+  } catch {
+    return new Date(ts).toISOString().slice(0, 10);
+  }
+}
 
 type UpcomingDay = {
   date: string; // YYYY-MM-DD
@@ -115,173 +143,274 @@ export default async function DashboardPage() {
     }
   }
 
+  // --- Dashboard stats ---------------------------------------------------
+  // Two at-a-glance numbers, both derived from logged workouts over the last 30
+  // days (a superset of "this week"), so a single query feeds both.
+  const windowStart = addDays(today, -29); // inclusive 30-day window
+  const { data: recentWorkouts } = await supabase
+    .from("workouts")
+    .select("performed_at")
+    .gte("performed_at", `${windowStart}T00:00:00`)
+    .order("performed_at", { ascending: false });
+
+  const monday = weekStartMonday(today);
+  const activeDates = new Set<string>();
+  let sessionsThisWeek = 0;
+  for (const w of recentWorkouts ?? []) {
+    const d = localDate(w.performed_at, timeZone);
+    activeDates.add(d); // dedupe multiple sessions on the same day
+    if (d >= monday) sessionsThisWeek += 1;
+  }
+  const activeDays = activeDates.size;
+
+  // Target sessions for the week come from the active plan's non-rest days this
+  // calendar week, when a plan exists; otherwise fall back to a sensible 5.
+  let weeklyTarget = 5;
+  if (parsed?.success && planRow) {
+    const sunday = addDays(monday, 6);
+    let planned = 0;
+    for (const week of parsed.data.weeks) {
+      week.days.forEach((day, dayIdx) => {
+        const date = dateForSlot(planRow.start_date, week.weekNumber, dayIdx);
+        if (date >= monday && date <= sunday && !day.isRestDay) planned += 1;
+      });
+    }
+    if (planned > 0) weeklyTarget = planned;
+  }
+  const sessionsRemaining = Math.max(0, weeklyTarget - sessionsThisWeek);
+
+  const greetingName = profile?.display_name?.trim().split(/\s+/)[0];
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <TimezoneSync serverToday={today} />
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <form action={signout}>
-          <button
-            type="submit"
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium dark:border-zinc-700"
+    <>
+      <Header email={user.email} />
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 p-5 sm:p-8">
+        <TimezoneSync serverToday={today} />
+
+        <section>
+          <p className="text-sm font-semibold uppercase tracking-[0.12em] text-rust">
+            Your training
+          </p>
+          <h1 className="mt-2 font-serif text-4xl font-semibold tracking-tight">
+            {greetingName
+              ? `Let's have a good week, ${greetingName}.`
+              : "Let's have a good week."}
+          </h1>
+          <p className="mt-2 max-w-prose text-muted">
+            {parsed?.success
+              ? "Steady work now pays off later. Here's where you stand."
+              : "Set a goal and your coach will build a plan around it."}
+          </p>
+        </section>
+
+        {/* Two at-a-glance stats */}
+        <section className="grid gap-4 sm:grid-cols-2">
+          <StatCard
+            label="This week's sessions"
+            value={String(sessionsThisWeek)}
+            unit={`done · ${sessionsRemaining} to go`}
           >
-            Sign out
-          </button>
-        </form>
-      </header>
+            <div className="mt-3 flex gap-1.5">
+              {Array.from({ length: weeklyTarget }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 flex-1 rounded-full ${
+                    i < sessionsThisWeek ? "bg-good" : "bg-line-strong"
+                  }`}
+                />
+              ))}
+            </div>
+          </StatCard>
 
-      <p className="text-zinc-600 dark:text-zinc-400">
-        Signed in as <span className="font-medium">{user.email}</span>
-        {profile?.display_name ? ` (${profile.display_name})` : ""}.
-      </p>
-
-      <CoachChat />
-
-      {parsed?.success && planRow && (
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 className="text-lg font-semibold">{planRow.name}</h2>
-            <Link
-              href={`/plan/${planRow.id}`}
-              className="shrink-0 text-sm text-zinc-500 hover:underline"
-            >
-              View plan
-            </Link>
-          </div>
-          {upcoming.length > 0 ? (
-            <ul className="flex flex-col gap-3">
-              {upcoming.map((day) => {
-                const done = loggedDays.has(day.date);
-                const logHref =
-                  `/workouts/new?plan=${planRow.id}&day=${day.date}` +
-                  `&focus=${encodeURIComponent(day.focus)}` +
-                  `&target=${encodeURIComponent(day.target)}` +
-                  // A gym day's prescribed exercises seed one logging card each.
-                  (day.exercises.length > 0
-                    ? `&exercises=${encodeURIComponent(JSON.stringify(day.exercises))}`
-                    : "");
+          <StatCard label="Active days · last 30" value={String(activeDays)} unit="of 30">
+            <div className="mt-3 grid grid-cols-[repeat(15,1fr)] gap-1">
+              {Array.from({ length: 30 }).map((_, i) => {
+                // Oldest day on the left, today on the right.
+                const date = addDays(windowStart, i);
+                const on = activeDates.has(date);
                 return (
-                  <li
-                    key={day.date}
-                    className={`flex items-start justify-between gap-4 rounded-md border p-4 ${
-                      done
-                        ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30"
-                        : "border-zinc-200 dark:border-zinc-800"
+                  <span
+                    key={i}
+                    className={`aspect-square rounded-full ${
+                      on ? "bg-olive" : "bg-line-strong"
                     }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                        {day.label === "Today" || day.label === "Tomorrow"
-                          ? `${day.label}'s workout`
-                          : day.label}
-                      </p>
-                      <p className="mt-1 font-medium">
-                        {day.isRestDay ? "Rest" : day.focus}
-                      </p>
-                      {!day.isRestDay && (
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                          {day.target}
-                        </p>
-                      )}
-                      {!day.isRestDay && day.exercises.length > 0 && (
-                        // Collapsed by default so detailed gym days stay compact.
-                        // Native <details> keeps this a server component (no JS).
-                        <details className="group mt-2">
-                          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
-                            <span
-                              aria-hidden
-                              className="inline-block transition-transform group-open:rotate-90"
-                            >
-                              ▸
-                            </span>
-                            {day.exercises.length}{" "}
-                            {day.exercises.length === 1 ? "exercise" : "exercises"}
-                          </summary>
-                          <ul className="mt-1 space-y-0.5">
-                            {day.exercises.map((ex, i) => (
-                              <li
-                                key={i}
-                                className="flex justify-between gap-3 text-sm text-zinc-600 dark:text-zinc-400"
-                              >
-                                <span className="truncate">{ex.name}</span>
-                                {ex.target && (
-                                  <span className="shrink-0 text-zinc-400">
-                                    {ex.target}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
-                      <p className="mt-2 text-xs text-zinc-400">{day.phase}</p>
-                    </div>
-                    {!day.isRestDay && (
-                      <div className="shrink-0">
-                        {done ? (
-                          <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 dark:text-green-400">
-                            <span aria-hidden>✓</span> Logged
-                          </span>
-                        ) : (
-                          <Link
-                            href={logHref}
-                            className="inline-flex items-center rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
-                          >
-                            Log this workout
-                          </Link>
-                        )}
-                      </div>
-                    )}
-                  </li>
+                  />
                 );
               })}
-            </ul>
-          ) : (
-            <p className="text-sm text-zinc-500">
-              This plan has no upcoming days — it may have finished.
-            </p>
-          )}
+            </div>
+          </StatCard>
         </section>
-      )}
 
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/workouts/new"
-          className="inline-flex w-fit items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
-        >
-          Log a workout
-        </Link>
-        <Link
-          href="/workouts"
-          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
-        >
-          View history
-        </Link>
-        <Link
-          href="/plan"
-          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
-        >
-          {parsed?.success ? "New plan" : "New training plan"}
-        </Link>
-        <Link
-          href="/about"
-          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
-        >
-          About me
-        </Link>
-        <Link
-          href="/usage"
-          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
-        >
-          AI usage
-        </Link>
-      </div>
+        <section className="flex flex-col gap-4">
+          <h2 className="flex items-baseline gap-3 font-serif text-2xl font-semibold">
+            Your coach
+            <span className="text-sm font-normal text-faint">
+              — here whenever you need a nudge
+            </span>
+          </h2>
+          <CoachChat />
+        </section>
 
-      {!parsed?.success && (
-        <p className="text-sm text-zinc-500">
-          Plan generation and daily workouts build on the goal you set here.
-        </p>
-      )}
-    </main>
+        {parsed?.success && planRow && (
+          <section className="flex flex-col gap-4">
+            <h2 className="flex items-baseline gap-3 font-serif text-2xl font-semibold">
+              The week ahead
+              <Link
+                href={`/plan/${planRow.id}`}
+                className="text-sm font-normal text-faint hover:text-ink hover:underline"
+              >
+                {planRow.name}
+              </Link>
+            </h2>
+            {upcoming.length > 0 ? (
+              <ol className="flex flex-col border-l-2 border-line pl-6">
+                {upcoming.map((day) => {
+                  const done = loggedDays.has(day.date);
+                  const logHref =
+                    `/workouts/new?plan=${planRow.id}&day=${day.date}` +
+                    `&focus=${encodeURIComponent(day.focus)}` +
+                    `&target=${encodeURIComponent(day.target)}` +
+                    // A gym day's prescribed exercises seed one logging card each.
+                    (day.exercises.length > 0
+                      ? `&exercises=${encodeURIComponent(JSON.stringify(day.exercises))}`
+                      : "");
+                  // Timeline dot color: logged → good, rest → faint, else rust.
+                  const dot = done
+                    ? "bg-good"
+                    : day.isRestDay
+                      ? "bg-faint"
+                      : "bg-rust";
+                  return (
+                    <li
+                      key={day.date}
+                      className={`relative flex items-start justify-between gap-4 border-b border-line py-4 last:border-b-0 ${
+                        day.isRestDay ? "opacity-60" : ""
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className={`absolute -left-[1.9rem] top-6 size-[11px] rounded-full border-2 border-paper ${dot}`}
+                      />
+                      <div className="min-w-0">
+                        <p className="font-serif text-sm font-semibold">
+                          {day.label}
+                        </p>
+                        <p className="mt-0.5 font-medium">
+                          {day.isRestDay ? "Rest day" : day.focus}
+                        </p>
+                        {!day.isRestDay && (
+                          <p className="text-sm text-muted">{day.target}</p>
+                        )}
+                        {!day.isRestDay && day.exercises.length > 0 && (
+                          // Collapsed by default so detailed gym days stay compact.
+                          // Native <details> keeps this a server component (no JS).
+                          <details className="group mt-2">
+                            <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-faint hover:text-muted">
+                              <span
+                                aria-hidden
+                                className="inline-block transition-transform group-open:rotate-90"
+                              >
+                                ▸
+                              </span>
+                              {day.exercises.length}{" "}
+                              {day.exercises.length === 1
+                                ? "exercise"
+                                : "exercises"}
+                            </summary>
+                            <ul className="mt-1 space-y-0.5">
+                              {day.exercises.map((ex, i) => (
+                                <li
+                                  key={i}
+                                  className="flex justify-between gap-3 text-sm text-muted"
+                                >
+                                  <span className="truncate">{ex.name}</span>
+                                  {ex.target && (
+                                    <span className="shrink-0 text-faint">
+                                      {ex.target}
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                        <p className="mt-1 font-serif text-xs italic text-faint">
+                          {day.phase} phase
+                        </p>
+                      </div>
+                      {!day.isRestDay && (
+                        <div className="shrink-0">
+                          {done ? (
+                            <span className="inline-flex items-center gap-1 font-serif text-sm font-semibold text-good">
+                              <span aria-hidden>✓</span> Logged
+                            </span>
+                          ) : (
+                            <Link
+                              href={logHref}
+                              className="inline-flex items-center rounded-full border border-line-strong bg-surface px-4 py-1.5 text-sm font-medium"
+                            >
+                              Log
+                            </Link>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="text-sm text-muted">
+                This plan has no upcoming days — it may have finished.
+              </p>
+            )}
+          </section>
+        )}
+
+        {!parsed?.success && (
+          <section className="rounded-2xl border border-dashed border-line-strong p-6 text-center">
+            <p className="text-muted">
+              No active plan yet. Plan generation and daily workouts build on the
+              goal you set.
+            </p>
+            <Link
+              href="/plan"
+              className="mt-3 inline-flex items-center rounded-full bg-rust px-5 py-2 text-sm font-medium text-on-rust"
+            >
+              Start a training plan
+            </Link>
+          </section>
+        )}
+      </main>
+    </>
+  );
+}
+
+/** A labeled stat tile with a big serif number and optional visual below. */
+function StatCard({
+  label,
+  value,
+  unit,
+  children,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-6 shadow-[0_2px_10px_rgba(43,38,32,0.04)]">
+      <p className="text-sm font-semibold uppercase tracking-[0.09em] text-faint">
+        {label}
+      </p>
+      <p className="mt-1 font-serif text-4xl font-semibold leading-none tracking-tight">
+        {value}
+        {unit && (
+          <span className="ml-1.5 font-sans text-base font-medium text-muted">
+            {unit}
+          </span>
+        )}
+      </p>
+      {children}
+    </div>
   );
 }

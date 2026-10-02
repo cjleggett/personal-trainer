@@ -164,20 +164,17 @@ export function CoachChat() {
   }
 
   return (
-    <section className="space-y-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
+    <section className="rounded-[20px] border border-line bg-surface p-6 shadow-[0_2px_10px_rgba(43,38,32,0.04)]">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold">Coach</h2>
-          <p className="text-sm text-zinc-500">
-            Ask a question, tell me about a schedule change or how you&apos;re
-            feeling, or log a workout — I&apos;ll help.
-          </p>
-        </div>
+        <p className="text-sm text-muted">
+          Ask a question, tell me about a schedule change or how you&apos;re
+          feeling, or log a workout — I&apos;ll help.
+        </p>
         {chat.length > 0 && (
           <button
             onClick={clearChat}
             disabled={isPending}
-            className="shrink-0 rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            className="shrink-0 rounded-full border border-line-strong px-2.5 py-1 text-xs font-medium text-muted hover:text-ink disabled:opacity-50"
           >
             Clear chat
           </button>
@@ -187,7 +184,7 @@ export function CoachChat() {
       {chat.length > 0 && (
         <div
           ref={listRef}
-          className="flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
+          className="mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
         >
           {chat.map((b, i) => (
             <ChatBubble key={i} bubble={b} />
@@ -198,21 +195,21 @@ export function CoachChat() {
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-rust">{error}</p>}
 
-      <div className="flex items-end gap-2">
+      <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           rows={2}
-          placeholder="e.g. My left quad is really sore, is that expected?"
-          className="flex-1 resize-none rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          placeholder="Tell me how you're feeling, ask a question, or log a workout…"
+          className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
         />
         <button
           onClick={send}
           disabled={isPending || !input.trim()}
-          className="rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
+          className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
         >
           Send
         </button>
@@ -227,27 +224,30 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] space-y-2 whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm ${
+        className={`max-w-[85%] space-y-2 whitespace-pre-wrap px-4 py-2.5 text-sm ${
           isUser
-            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-            : "border border-zinc-200 dark:border-zinc-800"
+            ? "rounded-[18px] rounded-br-md bg-ink text-paper"
+            : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
         <p>{bubble.text}</p>
         {draft && (
-          <div className="rounded-md border border-zinc-200 p-3 dark:border-zinc-700">
-            <p className="font-medium">{draft.title}</p>
-            <p className="text-zinc-600 dark:text-zinc-400">
+          <div className="rounded-2xl border border-dashed border-line-strong bg-paper p-4">
+            <p className="font-serif text-sm italic text-rust">May I suggest…</p>
+            <p className="mt-0.5 font-serif text-lg font-semibold">
+              {draft.title}
+            </p>
+            <p className="text-sm text-muted">
               {draft.workoutType}
               {draft.target ? ` · ${draft.target}` : ""}
             </p>
             {draft.exercises?.length ? (
-              <ul className="mt-2 space-y-0.5 text-zinc-600 dark:text-zinc-400">
+              <ul className="mt-2 space-y-0.5 text-sm text-muted">
                 {draft.exercises.map((ex, i) => (
                   <li key={i} className="flex justify-between gap-3">
                     <span>{ex.name}</span>
                     {ex.target && (
-                      <span className="shrink-0 text-zinc-500">{ex.target}</span>
+                      <span className="shrink-0 text-faint">{ex.target}</span>
                     )}
                   </li>
                 ))}
@@ -255,7 +255,7 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
             ) : null}
             <Link
               href={draftHref(draft)}
-              className="mt-2 inline-flex items-center rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"
+              className="mt-3 inline-flex items-center rounded-full bg-rust px-4 py-1.5 text-sm font-medium text-on-rust"
             >
               Log this workout
             </Link>

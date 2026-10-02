@@ -111,10 +111,10 @@ export function Combobox({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+        className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
       />
       {open && filtered.length > 0 && (
-        <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+        <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-line bg-surface shadow-lg">
           {filtered.map((opt, idx) => (
             <li key={opt.value}>
               <button
@@ -126,14 +126,12 @@ export function Combobox({
                 }}
                 onMouseEnter={() => setActiveIdx(idx)}
                 className={`block w-full px-3 py-2 text-left text-base ${
-                  idx === activeIdx
-                    ? "bg-zinc-100 dark:bg-zinc-800"
-                    : ""
+                  idx === activeIdx ? "bg-rust-soft" : ""
                 }`}
               >
                 {opt.label}
                 {opt.hint ? (
-                  <span className="text-zinc-500"> — {opt.hint}</span>
+                  <span className="text-faint"> — {opt.hint}</span>
                 ) : null}
               </button>
             </li>

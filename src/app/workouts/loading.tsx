@@ -1,17 +1,23 @@
+import { Header } from "@/app/Header";
+
 // Shown instantly during navigation to /workouts while the server component
-// loads — replaces the frozen-page feeling with a clean skeleton.
+// loads — replaces the frozen-page feeling with a clean skeleton. Renders the
+// Header so the navbar stays put during the load (no full-page flash).
 export default function Loading() {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
-      <div className="h-8 w-48 animate-pulse rounded bg-zinc-200 dark:bg-zinc-800" />
-      <ul className="flex flex-col gap-2">
+    <>
+      <Header />
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-5 sm:p-8">
+      <div className="h-10 w-56 animate-pulse rounded-lg bg-line" />
+      <ul className="flex flex-col gap-3">
         {Array.from({ length: 4 }).map((_, i) => (
           <li
             key={i}
-            className="h-20 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-900"
+            className="h-20 animate-pulse rounded-2xl border border-line bg-surface"
           />
         ))}
       </ul>
-    </main>
+      </main>
+    </>
   );
 }

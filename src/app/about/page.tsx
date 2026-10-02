@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Header } from "@/app/Header";
 import { AboutForm } from "./AboutForm";
 
 export default async function AboutPage() {
@@ -17,20 +18,26 @@ export default async function AboutPage() {
     .single(); // RLS scopes to the owner
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">About me</h1>
-        <Link href="/dashboard" className="text-sm text-zinc-500 hover:underline">
-          Done
-        </Link>
-      </header>
-      <p className="text-zinc-600 dark:text-zinc-400">
-        This context helps your coach tailor plans, workouts, and advice to you.
-      </p>
-      <AboutForm
-        aboutMe={profile?.about_me ?? ""}
-        coachNotes={profile?.coach_notes ?? ""}
-      />
-    </main>
+    <>
+      <Header email={user.email} />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-5 sm:p-8">
+        <div>
+          <Link href="/dashboard" className="text-sm text-muted hover:text-ink">
+            ← Back to dashboard
+          </Link>
+          <h1 className="mt-4 font-serif text-4xl font-semibold tracking-tight">
+            About me
+          </h1>
+          <p className="mt-2 text-muted">
+            This context helps your coach tailor plans, workouts, and advice to
+            you.
+          </p>
+        </div>
+        <AboutForm
+          aboutMe={profile?.about_me ?? ""}
+          coachNotes={profile?.coach_notes ?? ""}
+        />
+      </main>
+    </>
   );
 }

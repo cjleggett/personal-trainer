@@ -78,7 +78,7 @@ export function IntakeChat() {
   return (
     <div className="flex flex-col gap-4">
       {chat.length === 0 && (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted">
           Start by telling me what you want to train for — a race, a lift, a
           general goal. We&apos;ll refine it together.
         </p>
@@ -95,10 +95,10 @@ export function IntakeChat() {
 
       {ready && <GoalProfileCard ready={ready} />}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-rust">{error}</p>}
 
       {!ready && (
-        <div className="sticky bottom-0 -mx-4 flex items-end gap-2 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-md sm:border dark:border-zinc-800 dark:bg-zinc-950/90">
+        <div className="sticky bottom-0 -mx-5 flex items-end gap-2 border-t border-line bg-paper/90 px-5 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -110,12 +110,12 @@ export function IntakeChat() {
                 ? "Reply… (Enter to send, Shift+Enter for a new line)"
                 : "e.g. I want to run a half marathon at a 2-hour pace on November 1st"
             }
-            className="flex-1 resize-none rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            className="flex-1 resize-none rounded-[14px] border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
           />
           <button
             onClick={send}
             disabled={isPending || !input.trim()}
-            className="rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
+            className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
           >
             Send
           </button>
@@ -132,10 +132,10 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm ${
+        className={`max-w-[85%] whitespace-pre-wrap px-4 py-2.5 text-sm ${
           isUser
-            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-            : "border border-zinc-200 dark:border-zinc-800"
+            ? "rounded-[18px] rounded-br-md bg-ink text-paper"
+            : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
         {bubble.text}
@@ -165,10 +165,10 @@ function GoalProfileCard({ ready }: { ready: Ready }) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="space-y-3 rounded-2xl border border-line bg-surface p-5 shadow-[0_2px_10px_rgba(43,38,32,0.04)]">
         <div>
-          <h2 className="text-lg font-semibold">{profile.goal}</h2>
-          <p className="text-sm text-zinc-500">
+          <h2 className="font-serif text-xl font-semibold">{profile.goal}</h2>
+          <p className="text-sm text-muted">
             {profile.discipline}
             {profile.targetDate ? ` · target ${profile.targetDate}` : ""}
           </p>
@@ -203,11 +203,11 @@ function GoalProfileCard({ ready }: { ready: Ready }) {
       <button
         onClick={generate}
         disabled={isPending}
-        className="w-full rounded-md bg-zinc-900 px-4 py-3 text-base font-medium text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
+        className="w-full rounded-full bg-rust px-4 py-3 text-base font-medium text-on-rust disabled:opacity-50"
       >
         {isPending ? "Building your plan…" : "Generate plan"}
       </button>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-rust">{error}</p>}
     </div>
   );
 }
@@ -222,7 +222,7 @@ function Detail({
   return (
     <div className="text-sm">
       <span className="font-medium">{label}: </span>
-      <span className="text-zinc-600 dark:text-zinc-400">{children}</span>
+      <span className="text-muted">{children}</span>
     </div>
   );
 }
