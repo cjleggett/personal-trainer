@@ -84,13 +84,17 @@ export async function profileSummary(
 ): Promise<string> {
   const { data } = await supabase
     .from("profiles")
-    .select("goals, experience_level, equipment, constraints, about_me, coach_notes")
+    .select(
+      "display_name, birthday, goals, experience_level, equipment, constraints, about_me, coach_notes",
+    )
     .eq("id", userId)
     .single();
 
   if (!data) return "No profile details on file.";
 
   const lines: string[] = [];
+  if (data.display_name) lines.push(`- Name: ${data.display_name}`);
+  if (data.birthday) lines.push(`- Birthday: ${data.birthday}`);
   if (data.experience_level) lines.push(`- Experience level: ${data.experience_level}`);
   if (data.goals) lines.push(`- Stated goals: ${data.goals}`);
   if (data.equipment) lines.push(`- Equipment available: ${data.equipment}`);

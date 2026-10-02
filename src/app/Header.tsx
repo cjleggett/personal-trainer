@@ -2,21 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { signout } from "@/app/login/actions";
 
 /**
  * The shared Momentum top bar: brand, primary nav with active-route highlight,
- * a prominent "Log workout" action, and the account avatar / sign-out.
+ * a prominent "Log workout" action, and the account avatar.
  *
- * Rendered from the authenticated pages (passing the signed-in user's email so
- * the avatar initial is correct). It's a client component because the active
- * link is derived from the current pathname.
+ * The avatar opens a dropdown with the account pages (About me, Usage) and
+ * sign-out. Rendered from the authenticated pages (passing the signed-in user's
+ * email so the avatar initial is correct). It's a client component because the
+ * active link derives from the pathname and the menu holds open/close state.
  */
 
 const NAV = [
-  { href: "/dashboard", label: "Today" },
-  { href: "/workouts", label: "History" },
+  { href: "/dashboard", label: "Home" },
+  { href: "/workouts", label: "Workout History" },
   { href: "/plan", label: "Plan" },
+] as const;
+
+// Account pages, tucked under the avatar dropdown.
+const ACCOUNT_NAV = [
   { href: "/about", label: "About me" },
   { href: "/usage", label: "Usage" },
 ] as const;
@@ -25,9 +31,33 @@ export function Header({ email }: { email?: string | null }) {
   const pathname = usePathname();
   const initial = (email?.trim()?.[0] ?? "?").toUpperCase();
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // A nav item is active when the path matches or sits under its route.
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
+
+  // Close the dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const accountActive = ACCOUNT_NAV.some((item) => isActive(item.href));
 
   return (
     <header className="sticky top-0 z-10 flex h-[68px] items-center gap-6 border-b border-line bg-paper/90 px-4 backdrop-blur sm:px-8">
@@ -65,15 +95,58 @@ export function Header({ email }: { email?: string | null }) {
         + Log workout
       </Link>
 
-      <form action={signout}>
+      <div className="relative" ref={menuRef}>
         <button
-          type="submit"
-          title={email ? `Sign out (${email})` : "Sign out"}
-          className="grid size-[34px] place-items-center rounded-full bg-rust font-serif font-semibold text-on-rust"
+          type="button"
+          onClick={() => setMenuOpen((o) => !o)}
+          title={email ?? "Account"}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          className={`grid size-[34px] place-items-center rounded-full bg-rust font-serif font-semibold text-on-rust transition-shadow ${
+            menuOpen || accountActive
+              ? "ring-2 ring-rust ring-offset-2 ring-offset-paper"
+              : ""
+          }`}
         >
           {initial}
         </button>
-      </form>
+
+        {menuOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 top-[calc(100%+8px)] w-56 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-[0_8px_24px_rgba(43,38,32,0.12)]"
+          >
+            {email && (
+              <p className="truncate px-3 py-2 text-xs text-muted" title={email}>
+                {email}
+              </p>
+            )}
+            {ACCOUNT_NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className={`block px-3 py-2 text-sm transition-colors hover:bg-rust-soft ${
+                  isActive(item.href) ? "font-medium text-ink" : "text-ink"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+            <div className="my-1 border-t border-line" />
+            <form action={signout}>
+              <button
+                type="submit"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-sm text-rust transition-colors hover:bg-rust-soft"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
     </header>
   );
 }

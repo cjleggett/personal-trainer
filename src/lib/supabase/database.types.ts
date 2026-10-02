@@ -138,6 +138,7 @@ export type Database = {
       profiles: {
         Row: {
           about_me: string | null
+          birthday: string | null
           coach_notes: string | null
           constraints: string | null
           created_at: string
@@ -150,6 +151,7 @@ export type Database = {
         }
         Insert: {
           about_me?: string | null
+          birthday?: string | null
           coach_notes?: string | null
           constraints?: string | null
           created_at?: string
@@ -162,6 +164,7 @@ export type Database = {
         }
         Update: {
           about_me?: string | null
+          birthday?: string | null
           coach_notes?: string | null
           constraints?: string | null
           created_at?: string

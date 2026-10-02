@@ -9,9 +9,13 @@ import { saveAbout, type SaveAboutResult } from "./actions";
  * writes during chat — the note under it explains that.
  */
 export function AboutForm({
+  displayName,
+  birthday,
   aboutMe,
   coachNotes,
 }: {
+  displayName: string;
+  birthday: string;
   aboutMe: string;
   coachNotes: string;
 }) {
@@ -22,6 +26,40 @@ export function AboutForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-serif text-xl font-semibold">Your details</h2>
+          <p className="text-sm text-muted">
+            Your name is how your coach addresses you. Your birthday is optional
+            and helps tailor training to your age.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">Name</span>
+            <input
+              type="text"
+              name="display_name"
+              required
+              defaultValue={displayName}
+              placeholder="e.g. Alex"
+              className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">
+              Birthday <span className="text-muted">(optional)</span>
+            </span>
+            <input
+              type="date"
+              name="birthday"
+              defaultValue={birthday}
+              className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+            />
+          </label>
+        </div>
+      </section>
+
       <section className="space-y-2">
         <div>
           <h2 className="font-serif text-xl font-semibold">About me</h2>

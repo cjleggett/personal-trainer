@@ -13,7 +13,7 @@ export default async function AboutPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("about_me, coach_notes")
+    .select("display_name, birthday, about_me, coach_notes")
     .eq("id", user.id)
     .single(); // RLS scopes to the owner
 
@@ -34,6 +34,8 @@ export default async function AboutPage() {
           </p>
         </div>
         <AboutForm
+          displayName={profile?.display_name ?? ""}
+          birthday={profile?.birthday ?? ""}
           aboutMe={profile?.about_me ?? ""}
           coachNotes={profile?.coach_notes ?? ""}
         />

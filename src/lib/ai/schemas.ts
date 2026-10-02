@@ -305,6 +305,47 @@ export const coachTurnSchema = z.discriminatedUnion("kind", [
 
 export type CoachTurn = z.infer<typeof coachTurnSchema>;
 
+// ── Plan edit chat (conversational, scoped to ONE plan) ───────────────────────
+//
+// The plan page carries a focused chat for refining the plan you're looking at.
+// It's a narrower coach: the user talks about THIS plan ("make week 3 easier",
+// "I can't train Fridays anymore", "add detail to the gym days") and each turn
+// the model either replies or returns the full revised plan. Unlike the
+// dashboard coach it never drafts workouts — editing the plan is the only
+// action. The server saves an updatePlan to the plan being viewed (keeping its
+// start_date anchored unless the user moves it). Voice/rules: prompts/plan-edit.
+export const planEditTurnSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("reply"),
+    message: z
+      .string()
+      .describe(
+        "A conversational reply: answer a question about the plan, explain your reasoning, or ask a clarification. Use this when no change is warranted yet, or the request is ambiguous or risky.",
+      ),
+    updatedCoachNotes,
+  }),
+  z.object({
+    kind: z.literal("updatePlan"),
+    message: z
+      .string()
+      .describe(
+        "A short summary of what you changed in the plan and why, addressed to the user.",
+      ),
+    plan: trainingPlanSchema.describe(
+      "The FULL revised plan. Preserve everything the user did not ask to change; keep the same number of weeks and the Monday→Sunday day order.",
+    ),
+    newStartDate: z
+      .string()
+      .nullable()
+      .describe(
+        "Set ONLY when the user wants to shift WHEN the plan begins (e.g. 'start a week earlier', 'begin Sep 28'). The date (YYYY-MM-DD) Week 1 Day 1 should fall on; every plan day shifts by the same offset. Use the calendar reference above to pick it — don't guess. Shifting the start does not add or remove weeks; change the week count via `plan` if the goal date needs it. Return null to keep the current start date (the usual case).",
+      ),
+    updatedCoachNotes,
+  }),
+]);
+
+export type PlanEditTurn = z.infer<typeof planEditTurnSchema>;
+
 // ── Goal intake (conversational) ─────────────────────────────────────────────
 //
 // The intake flow is a free-flowing chat: the user states a goal, and each turn

@@ -70,6 +70,7 @@ export function CoachChat() {
   const [input, setInput] = useState("");
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Restore a saved conversation on mount. We start from empty state (so the
@@ -108,10 +109,13 @@ export function CoachChat() {
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
+    // On expand the list mounts fresh scrolled to the top — always jump to the
+    // bottom then. Afterwards only auto-follow when already near the bottom, so
+    // scrolling up to re-read isn't yanked back down.
     const nearBottom =
       el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [chat, isPending]);
+    if (expanded || nearBottom) el.scrollTop = el.scrollHeight;
+  }, [chat, isPending, expanded]);
 
   /** Wipe the conversation (state + persisted copy). */
   function clearChat() {
@@ -165,55 +169,79 @@ export function CoachChat() {
 
   return (
     <section className="rounded-[20px] border border-line bg-surface p-6 shadow-[0_2px_10px_rgba(43,38,32,0.04)]">
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-sm text-muted">
-          Ask a question, tell me about a schedule change or how you&apos;re
-          feeling, or log a workout — I&apos;ll help.
-        </p>
-        {chat.length > 0 && (
-          <button
-            onClick={clearChat}
-            disabled={isPending}
-            className="shrink-0 rounded-full border border-line-strong px-2.5 py-1 text-xs font-medium text-muted hover:text-ink disabled:opacity-50"
-          >
-            Clear chat
-          </button>
-        )}
-      </div>
-
-      {chat.length > 0 && (
-        <div
-          ref={listRef}
-          className="mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
-        >
-          {chat.map((b, i) => (
-            <ChatBubble key={i} bubble={b} />
-          ))}
-          {isPending && (
-            <ChatBubble bubble={{ role: "assistant", text: "…" }} />
-          )}
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-4 text-left"
+      >
+        <div>
+          <h2 className="font-serif text-2xl font-semibold">
+            Chat with your coach
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Use this chat to ask questions, request edits to your plan, or even
+            log a workout!
+          </p>
         </div>
-      )}
-
-      {error && <p className="mt-3 text-sm text-rust">{error}</p>}
-
-      <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={2}
-          placeholder="Tell me how you're feeling, ask a question, or log a workout…"
-          className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
-        />
-        <button
-          onClick={send}
-          disabled={isPending || !input.trim()}
-          className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+        <span
+          aria-hidden
+          className={`shrink-0 text-2xl leading-none text-muted transition-transform ${
+            expanded ? "rotate-180" : ""
+          }`}
         >
-          Send
-        </button>
-      </div>
+          ▾
+        </span>
+      </button>
+
+      {expanded && (
+        <>
+          {chat.length > 0 && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={clearChat}
+                disabled={isPending}
+                className="shrink-0 rounded-full border border-line-strong px-2.5 py-1 text-xs font-medium text-muted hover:text-ink disabled:opacity-50"
+              >
+                Clear chat
+              </button>
+            </div>
+          )}
+
+          {chat.length > 0 && (
+            <div
+              ref={listRef}
+              className="mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
+            >
+              {chat.map((b, i) => (
+                <ChatBubble key={i} bubble={b} />
+              ))}
+              {isPending && (
+                <ChatBubble bubble={{ role: "assistant", text: "…" }} />
+              )}
+            </div>
+          )}
+
+          {error && <p className="mt-3 text-sm text-rust">{error}</p>}
+
+          <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={2}
+              placeholder="Tell me how you're feeling, ask a question, or log a workout…"
+              className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+            />
+            <button
+              onClick={send}
+              disabled={isPending || !input.trim()}
+              className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+            >
+              Send
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }

@@ -11,6 +11,18 @@ export default async function PlanPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // If the athlete already has an active plan, the "Plan" tab opens straight to
+  // it (where they can view and edit it). Only when there's no active plan does
+  // this page show the goal-intake flow for building a new one.
+  const { data: activePlan } = await supabase
+    .from("training_plans")
+    .select("id")
+    .eq("status", "active")
+    .order("start_date", { ascending: false })
+    .limit(1)
+    .maybeSingle(); // RLS scopes to the owner
+  if (activePlan) redirect(`/plan/${activePlan.id}`);
+
   return (
     <>
       <Header email={user.email} />

@@ -188,19 +188,9 @@ export default async function DashboardPage() {
         <TimezoneSync serverToday={today} />
 
         <section>
-          <p className="text-sm font-semibold uppercase tracking-[0.12em] text-rust">
-            Your training
-          </p>
-          <h1 className="mt-2 font-serif text-4xl font-semibold tracking-tight">
-            {greetingName
-              ? `Let's have a good week, ${greetingName}.`
-              : "Let's have a good week."}
+          <h1 className="font-serif text-4xl font-semibold tracking-tight">
+            {greetingName ? `Welcome back, ${greetingName}.` : "Welcome back."}
           </h1>
-          <p className="mt-2 max-w-prose text-muted">
-            {parsed?.success
-              ? "Steady work now pays off later. Here's where you stand."
-              : "Set a goal and your coach will build a plan around it."}
-          </p>
         </section>
 
         {/* Two at-a-glance stats */}
@@ -241,15 +231,7 @@ export default async function DashboardPage() {
           </StatCard>
         </section>
 
-        <section className="flex flex-col gap-4">
-          <h2 className="flex items-baseline gap-3 font-serif text-2xl font-semibold">
-            Your coach
-            <span className="text-sm font-normal text-faint">
-              — here whenever you need a nudge
-            </span>
-          </h2>
-          <CoachChat />
-        </section>
+        <CoachChat />
 
         {parsed?.success && planRow && (
           <section className="flex flex-col gap-4">
