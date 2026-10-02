@@ -25,6 +25,13 @@ export function planEditKey(userId: string, planId: string): string {
   return `${PLAN_EDIT_PREFIX}:${userId}:${planId}:v1`;
 }
 
+/** Per-user, per-plan key for the plan re-evaluation chat. Shares the
+ * `plan-edit` prefix so sign-out's sweep (and the legacy-key match) clears it
+ * too, but a distinct `reeval` segment keeps it separate from the edit chat. */
+export function planReevalKey(userId: string, planId: string): string {
+  return `${PLAN_EDIT_PREFIX}:reeval:${userId}:${planId}:v1`;
+}
+
 /** Remove every coach / plan-edit transcript from localStorage (sign-out). */
 export function clearChatStorage() {
   if (typeof window === "undefined") return;

@@ -11,7 +11,10 @@ import {
 } from "@/lib/ai/schemas";
 import { generateValidatedWithTools } from "@/lib/ai/generate";
 import { buildCoachTools } from "@/lib/ai/coach-tools";
-import { PLAN_EDIT_SYSTEM_PROMPT } from "@/lib/ai/prompts/plan-edit";
+import {
+  PLAN_EDIT_SYSTEM_PROMPT,
+  REEVALUATE_INSTRUCTION,
+} from "@/lib/ai/prompts/plan-edit";
 import { buildCoachContext } from "@/lib/ai/prompts/coach";
 import {
   profileSummary,
@@ -114,6 +117,49 @@ async function runPlanEditTurn(
   return { ok: true, turn, messages: updated };
 }
 
+/** Load the plan + profile + history and assemble the opening context block.
+ * Shared by both openers: the user-typed first message of an edit chat and the
+ * coach-led re-evaluation instruction. Returns the error shape on any failure so
+ * callers can bail directly. */
+async function buildOpener(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  planId: string,
+  firstMessage: string,
+): Promise<{ ok: true; opener: string } | { ok: false; error: string }> {
+  const row = await loadPlan(supabase, planId);
+  if (!row) return { ok: false, error: "That plan could not be found." };
+
+  const parsed = trainingPlanSchema.safeParse(row.plan);
+  if (!parsed.success) {
+    return { ok: false, error: "This plan's data is malformed." };
+  }
+
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  const [profile, history, recentDetail, catalog, typeCatalog] =
+    await Promise.all([
+      profileSummary(supabase, userId),
+      historySummary(supabase, userId, now),
+      recentDetailedWorkouts(supabase, userId, now, 10),
+      exerciseCatalogSummary(supabase),
+      workoutTypeCatalogSummary(supabase),
+    ]);
+
+  const opener = buildCoachContext({
+    today,
+    planJson: JSON.stringify(parsed.data, null, 2),
+    weekDates: weekDateRanges(row.start_date, parsed.data.weeks.length),
+    profileSummary: profile,
+    historySummary: history,
+    recentDetail,
+    exerciseCatalog: catalog,
+    workoutTypeCatalog: typeCatalog,
+    firstMessage,
+  });
+  return { ok: true, opener };
+}
+
 /** Start a plan-edit conversation from the user's first message. Loads the plan
  * being viewed + profile + history and builds the context opener. */
 export async function startPlanEdit(
@@ -130,40 +176,53 @@ export async function startPlanEdit(
     return { ok: false, error: "Type a message to get started." };
   }
 
-  const row = await loadPlan(supabase, planId);
-  if (!row) return { ok: false, error: "That plan could not be found." };
-
-  const parsed = trainingPlanSchema.safeParse(row.plan);
-  if (!parsed.success) {
-    return { ok: false, error: "This plan's data is malformed." };
-  }
-
-  const now = new Date().toISOString();
-  const today = now.slice(0, 10);
-  const [profile, history, recentDetail, catalog, typeCatalog] =
-    await Promise.all([
-      profileSummary(supabase, user.id),
-      historySummary(supabase, user.id, now),
-      recentDetailedWorkouts(supabase, user.id, now, 10),
-      exerciseCatalogSummary(supabase),
-      workoutTypeCatalogSummary(supabase),
-    ]);
-
-  const opener = buildCoachContext({
-    today,
-    planJson: JSON.stringify(parsed.data, null, 2),
-    weekDates: weekDateRanges(row.start_date, parsed.data.weeks.length),
-    profileSummary: profile,
-    historySummary: history,
-    recentDetail,
-    exerciseCatalog: catalog,
-    workoutTypeCatalog: typeCatalog,
-    firstMessage,
-  });
+  const built = await buildOpener(supabase, user.id, planId, firstMessage);
+  if (!built.ok) return built;
 
   return runPlanEditTurn(supabase, user.id, planId, [
-    { role: "user", content: opener },
+    { role: "user", content: built.opener },
   ]);
+}
+
+/** Start a coach-led re-evaluation of the plan. Unlike startPlanEdit, there's no
+ * user message: the coach reviews the plan against recent training and proposes
+ * changes (see REEVALUATE_INSTRUCTION). We also stamp `last_reevaluated_at` so
+ * the dashboard's staleness nudge resets even when the review ends in no change
+ * (which wouldn't bump `updated_at`). */
+export async function startReevaluation(
+  planId: string,
+): Promise<PlanEditResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const built = await buildOpener(
+    supabase,
+    user.id,
+    planId,
+    REEVALUATE_INSTRUCTION,
+  );
+  if (!built.ok) return built;
+
+  const result = await runPlanEditTurn(supabase, user.id, planId, [
+    { role: "user", content: built.opener },
+  ]);
+
+  // Mark the plan reviewed regardless of whether the coach changed it — the act
+  // of reviewing is what resets the nudge clock. Best-effort; RLS scopes to the
+  // owner. Only stamp on a successful turn so a failed review still nags.
+  if (result.ok) {
+    await supabase
+      .from("training_plans")
+      .update({ last_reevaluated_at: new Date().toISOString() })
+      .eq("id", planId);
+    revalidatePath("/dashboard");
+    revalidatePath(`/plan/${planId}`);
+  }
+
+  return result;
 }
 
 /** Continue a plan-edit conversation with the user's next reply. The client
