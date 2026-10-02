@@ -8,6 +8,7 @@ import {
   continuePlanEdit,
   type PlanEditResult,
 } from "../edit-actions";
+import { planEditKey } from "@/lib/coach/chat-storage";
 
 /**
  * The plan page's "edit with your coach" chat. A collapsible panel that sits
@@ -25,15 +26,10 @@ type Bubble = { role: "user" | "assistant"; text: string };
 
 type PersistedChat = { messages: ModelMessage[]; chat: Bubble[] };
 
-/** Per-plan storage key so each plan keeps its own edit thread. */
-function storageKey(planId: string): string {
-  return `plan-edit-${planId}-v1`;
-}
-
-function loadPersisted(planId: string): PersistedChat | null {
+function loadPersisted(storageKey: string): PersistedChat | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(storageKey(planId));
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedChat;
     if (!Array.isArray(parsed.messages) || !Array.isArray(parsed.chat)) return null;
@@ -43,8 +39,15 @@ function loadPersisted(planId: string): PersistedChat | null {
   }
 }
 
-export function EditPlanChat({ planId }: { planId: string }) {
+export function EditPlanChat({
+  planId,
+  userId,
+}: {
+  planId: string;
+  userId: string;
+}) {
   const router = useRouter();
+  const storageKey = planEditKey(userId, planId);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ModelMessage[]>([]);
   const [chat, setChat] = useState<Bubble[]>([]);
@@ -59,7 +62,7 @@ export function EditPlanChat({ planId }: { planId: string }) {
   // state over a saved one before loading it.
   const [restored, setRestored] = useState(false);
   useEffect(() => {
-    const saved = loadPersisted(planId);
+    const saved = loadPersisted(storageKey);
     if (saved && saved.chat.length > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage on mount
       setMessages(saved.messages);
@@ -67,19 +70,18 @@ export function EditPlanChat({ planId }: { planId: string }) {
       setStarted(saved.messages.length > 0);
     }
     setRestored(true);
-  }, [planId]);
+  }, [storageKey]);
 
   // Persist after every change, once restored. An empty conversation clears the
   // key (used by the Clear button and a fresh start).
   useEffect(() => {
     if (!restored || typeof window === "undefined") return;
-    const key = storageKey(planId);
     if (chat.length === 0) {
-      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(storageKey);
     } else {
-      window.localStorage.setItem(key, JSON.stringify({ messages, chat }));
+      window.localStorage.setItem(storageKey, JSON.stringify({ messages, chat }));
     }
-  }, [restored, planId, messages, chat]);
+  }, [restored, storageKey, messages, chat]);
 
   // Scroll the message list (not the page) to the bottom as it grows, but only
   // when the user is already near the bottom so scrolling up isn't yanked back.
