@@ -17,6 +17,24 @@ import { TimezoneSync } from "./TimezoneSync";
 /** How many upcoming plan days to surface on the dashboard. */
 const UPCOMING_COUNT = 4;
 
+/** A plan goes "stale" once it's gone this long without being changed or
+ * reviewed; past this we nudge the athlete to re-evaluate it. */
+const REEVALUATE_AFTER_DAYS = 7;
+
+/** Whole days since the later of the plan's last change and last review. Null if
+ * neither timestamp is usable. Drives the dashboard's re-evaluate nudge. */
+function daysSinceReviewed(
+  updatedAt: string | null,
+  lastReevaluatedAt: string | null,
+): number | null {
+  const times = [updatedAt, lastReevaluatedAt]
+    .map((t) => (t ? new Date(t).getTime() : NaN))
+    .filter((t) => !Number.isNaN(t));
+  if (times.length === 0) return null;
+  const latest = Math.max(...times);
+  return Math.floor((Date.now() - latest) / 86_400_000);
+}
+
 /** Sunday-based weekday index, to find the Monday that starts "this week". */
 const SUNDAY_INDEX: Record<string, number> = {
   Sunday: 0,
@@ -115,7 +133,9 @@ export default async function DashboardPage() {
       .single(),
     supabase
       .from("training_plans")
-      .select("id, name, start_date, target_date, plan")
+      .select(
+        "id, name, start_date, target_date, plan, updated_at, last_reevaluated_at",
+      )
       .eq("status", "active")
       .order("start_date", { ascending: false })
       .limit(1)
@@ -181,6 +201,16 @@ export default async function DashboardPage() {
 
   const greetingName = profile?.display_name?.trim().split(/\s+/)[0];
 
+  // Nudge the athlete to re-evaluate a plan that's gone untouched/unreviewed for
+  // a week — real training drifts from the plan, and a periodic coach review
+  // keeps it honest (and resets this clock).
+  const staleDays =
+    parsed?.success && planRow
+      ? daysSinceReviewed(planRow.updated_at, planRow.last_reevaluated_at)
+      : null;
+  const showReevaluateNudge =
+    staleDays !== null && staleDays >= REEVALUATE_AFTER_DAYS;
+
   return (
     <>
       <Header email={user.email} />
@@ -230,6 +260,26 @@ export default async function DashboardPage() {
             </div>
           </StatCard>
         </section>
+
+        {showReevaluateNudge && planRow && (
+          <Link
+            href={`/plan/${planRow.id}?reevaluate=1`}
+            className="group flex items-center justify-between gap-4 rounded-2xl border border-rust/30 bg-rust-soft px-5 py-4"
+          >
+            <div className="min-w-0">
+              <p className="font-serif text-base font-semibold text-ink">
+                Time to check in on your plan
+              </p>
+              <p className="mt-0.5 text-sm text-muted">
+                It&apos;s been {staleDays} days since your plan last changed. Let
+                your coach review your progress and adjust it.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-rust px-4 py-1.5 text-sm font-medium text-on-rust">
+              Re-evaluate
+            </span>
+          </Link>
+        )}
 
         <CoachChat userId={user.id} />
 

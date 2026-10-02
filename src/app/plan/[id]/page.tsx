@@ -10,6 +10,7 @@ import {
 import { dateForSlot } from "@/lib/logging/plan-dates";
 import { DeletePlanButton } from "./DeletePlanButton";
 import { EditPlanChat } from "./EditPlanChat";
+import { ReevaluateChat } from "./ReevaluateChat";
 
 function formatDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, {
@@ -81,10 +82,15 @@ function PlanOverview({ weeks }: { weeks: PlanWeek[] }) {
 
 export default async function PlanDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  // The dashboard's staleness nudge deep-links here with ?reevaluate=1 to open
+  // the re-evaluation panel straight into a running review.
+  const openReevaluate = (await searchParams).reevaluate === "1";
   const supabase = await createClient();
   const {
     data: { user },
@@ -133,6 +139,12 @@ export default async function PlanDetailPage({
             {row.target_date ? ` · goal ${formatDate(row.target_date)}` : ""}
           </p>
         </header>
+
+        <ReevaluateChat
+          planId={id}
+          userId={user.id}
+          defaultOpen={openReevaluate}
+        />
 
         <EditPlanChat planId={id} userId={user.id} />
 

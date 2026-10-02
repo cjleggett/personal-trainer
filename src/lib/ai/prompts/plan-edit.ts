@@ -90,3 +90,37 @@ Guidance:
 - Dates: the user thinks in calendar dates, but the plan is labeled by week
   number + weekday. Use the calendar reference below to map dates to slots.
 `.trim();
+
+/**
+ * RE-EVALUATION opener — the coach-led first turn of a periodic plan review.
+ *
+ * Unlike the edit chat (user speaks first), re-evaluation opens with the coach
+ * proactively auditing the plan against what the athlete has ACTUALLY been
+ * doing. It runs under the same PLAN_EDIT_SYSTEM_PROMPT (same reply/updatePlan
+ * actions, tools, and safety rules) — this is just the opening instruction we
+ * feed as the first user turn. The usual flow is: reply first with findings +
+ * a concrete proposal, let the athlete respond, then updatePlan once they're on
+ * board. The context blocks (plan, profile, history, catalogs) are assembled by
+ * buildCoachContext in `coach.ts`; this string is passed as its `firstMessage`.
+ */
+export const REEVALUATE_INSTRUCTION = `
+Re-evaluate this plan. Review it against the athlete's actual recent training
+history (summarized below; call query_training_history for any specific numbers
+you need — recent long-run distances, how heavy they've been lifting, how many
+sessions they actually hit per week). Focus on:
+
+- Recent injuries, illness, or pain mentioned in notes or the profile — a plan
+  that ignores a flare-up is dangerous.
+- Gaps between the plan and reality: sessions skipped, a long layoff, or
+  training well above/below the prescribed volume. If they've missed a stretch,
+  the plan must NOT just resume where it left off — ramping back up too fast
+  risks injury. Rebuild the ramp from where they actually are.
+- Whether the remaining weeks still realistically reach the goal by its date,
+  given the time left and their current fitness.
+
+For this FIRST turn, reply (don't change anything yet): summarize what you see in
+a few sentences, then propose the specific adjustments you'd make and ask if they
+want you to apply them. If after looking you judge the plan is still well-matched
+to their training, say so plainly and don't invent changes. Only updatePlan once
+the athlete confirms, or if they've already asked you to just go ahead.
+`.trim();

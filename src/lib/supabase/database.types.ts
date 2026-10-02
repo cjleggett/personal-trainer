@@ -245,6 +245,7 @@ export type Database = {
           created_at: string
           goal_profile: Json
           id: string
+          last_reevaluated_at: string | null
           name: string
           plan: Json
           start_date: string
@@ -257,6 +258,7 @@ export type Database = {
           created_at?: string
           goal_profile: Json
           id?: string
+          last_reevaluated_at?: string | null
           name: string
           plan: Json
           start_date: string
@@ -269,6 +271,7 @@ export type Database = {
           created_at?: string
           goal_profile?: Json
           id?: string
+          last_reevaluated_at?: string | null
           name?: string
           plan?: Json
           start_date?: string
