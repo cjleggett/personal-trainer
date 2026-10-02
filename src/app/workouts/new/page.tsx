@@ -92,14 +92,16 @@ export default async function NewWorkoutPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: exercises }, shoes, params] = await Promise.all([
-    supabase
-      .from("exercises")
-      .select("id, name, muscle_group, measurement_type")
-      .order("name"),
-    listShoesWithMileage(supabase, user.id),
-    searchParams,
-  ]);
+  const [{ data: exercises }, { data: workoutTypes }, shoes, params] =
+    await Promise.all([
+      supabase
+        .from("exercises")
+        .select("id, name, muscle_group, measurement_type")
+        .order("name"),
+      supabase.from("workout_types").select("id, name, emoji").order("name"),
+      listShoesWithMileage(supabase, user.id),
+      searchParams,
+    ]);
 
   const prefill = prefillFromParams(params);
 
@@ -123,6 +125,7 @@ export default async function NewWorkoutPage({
         </div>
         <WorkoutForm
           catalog={(exercises as CatalogExercise[]) ?? []}
+          workoutTypes={workoutTypes ?? []}
           shoes={shoes}
           prefill={prefill}
         />

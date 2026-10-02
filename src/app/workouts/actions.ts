@@ -23,7 +23,11 @@ export type InstancePayload = {
 
 export type SavePayload = {
   title?: string;
-  workoutType?: string;
+  /** The chosen workout type's catalog id (null/undefined = no type). */
+  workoutTypeId?: string;
+  /** The chosen type's name, carried from the client so we can build the default
+   * title without a DB round-trip. Not stored directly — the FK id is. */
+  workoutTypeName?: string;
   notes?: string;
   /** ISO date (YYYY-MM-DD) of when the workout happened. Defaults to today. */
   performedOn?: string;
@@ -57,7 +61,8 @@ function toCanonicalSet(
 
 /** Build the workout column values shared by create and update. */
 function buildWorkoutFields(payload: SavePayload) {
-  const workoutType = payload.workoutType?.trim() || null;
+  const workoutTypeId = payload.workoutTypeId || null;
+  const workoutTypeName = payload.workoutTypeName?.trim() || null;
   const datePrefix = payload.performedOn
     ? // Format the chosen YYYY-MM-DD as MM/DD/YYYY for the autofilled title.
       (() => {
@@ -67,13 +72,13 @@ function buildWorkoutFields(payload: SavePayload) {
     : todayTitlePrefix();
   const title =
     payload.title?.trim() ||
-    [datePrefix, workoutType].filter(Boolean).join(" ") ||
+    [datePrefix, workoutTypeName].filter(Boolean).join(" ") ||
     null;
   // Store performed_at at local noon of the chosen day to avoid TZ date-shift.
   const performedAt = payload.performedOn
     ? new Date(`${payload.performedOn}T12:00:00`).toISOString()
     : undefined; // let the DB default (now()) apply on create
-  return { workoutType, title, performedAt };
+  return { workoutTypeId, title, performedAt };
 }
 
 /** Expand set-groups into flat canonical set objects for one instance row. */
@@ -142,7 +147,7 @@ export async function createWorkout(payload: SavePayload) {
     return { error: "Add at least one exercise with a set before saving." };
   }
 
-  const { workoutType, title, performedAt } = buildWorkoutFields(payload);
+  const { workoutTypeId, title, performedAt } = buildWorkoutFields(payload);
 
   const shoe = await resolveShoeId(supabase, user.id, payload);
   if ("error" in shoe) return { error: shoe.error };
@@ -152,7 +157,7 @@ export async function createWorkout(payload: SavePayload) {
     .insert({
       user_id: user.id,
       title,
-      workout_type: workoutType,
+      workout_type_id: workoutTypeId,
       notes: payload.notes?.trim() || null,
       shoe_id: shoe.shoeId,
       ...(performedAt ? { performed_at: performedAt } : {}),
@@ -190,7 +195,7 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
     return { error: "Add at least one exercise with a set before saving." };
   }
 
-  const { workoutType, title, performedAt } = buildWorkoutFields(payload);
+  const { workoutTypeId, title, performedAt } = buildWorkoutFields(payload);
 
   const shoe = await resolveShoeId(supabase, user.id, payload);
   if ("error" in shoe) return { error: shoe.error };
@@ -199,7 +204,7 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
     .from("workouts")
     .update({
       title,
-      workout_type: workoutType,
+      workout_type_id: workoutTypeId,
       notes: payload.notes?.trim() || null,
       shoe_id: shoe.shoeId, // null clears a previously-attached pair
       ...(performedAt ? { performed_at: performedAt } : {}),
@@ -223,6 +228,61 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
   revalidatePath("/workouts");
   revalidatePath(`/workouts/${workoutId}`);
   redirect(`/workouts/${workoutId}`);
+}
+
+/** A workout type as the picker needs it. */
+export type WorkoutTypeOption = { id: string; name: string; emoji: string };
+
+/**
+ * Add a new workout type to the shared global catalog (mirrors create_exercise:
+ * reuse an existing row by case-insensitive name rather than duplicating, backed
+ * by the ci-unique index). Any authenticated user may add one; it becomes a
+ * selectable type for everyone. Returns the new/reused option, or an error.
+ */
+export async function createWorkoutType(
+  name: string,
+  emoji: string,
+): Promise<{ type: WorkoutTypeOption } | { error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const cleanName = name.trim();
+  const cleanEmoji = emoji.trim();
+  if (!cleanName) return { error: "Enter a name for the workout type." };
+  if (!cleanEmoji) return { error: "Pick an emoji for the workout type." };
+
+  // Reuse an existing type by case-insensitive name (also backstopped by index).
+  const { data: existing } = await supabase
+    .from("workout_types")
+    .select("id, name, emoji")
+    .ilike("name", cleanName)
+    .limit(1)
+    .maybeSingle();
+  if (existing) return { type: existing };
+
+  const { data: created, error } = await supabase
+    .from("workout_types")
+    .insert({ name: cleanName, emoji: cleanEmoji })
+    .select("id, name, emoji")
+    .single();
+
+  if (error) {
+    // A race on the unique index surfaces here; re-fetch and reuse.
+    const { data: raced } = await supabase
+      .from("workout_types")
+      .select("id, name, emoji")
+      .ilike("name", cleanName)
+      .limit(1)
+      .maybeSingle();
+    if (raced) return { type: raced };
+    return { error: `Couldn't create the type: ${error.message}` };
+  }
+
+  revalidatePath("/workouts");
+  return { type: created };
 }
 
 export async function deleteWorkout(workoutId: string) {

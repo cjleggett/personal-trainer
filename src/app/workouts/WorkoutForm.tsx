@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   METRIC_FIELDS,
-  WORKOUT_TYPE_PRESETS,
   todayTitlePrefix,
   autoExerciseForType,
   parseTargetToMetrics,
@@ -18,9 +17,12 @@ import {
   createWorkout,
   updateWorkout,
   deleteWorkout,
+  createWorkoutType,
   type SavePayload,
+  type WorkoutTypeOption,
 } from "./actions";
 import { Combobox } from "./Combobox";
+import { EmojiPicker } from "./EmojiPicker";
 
 export type CatalogExercise = {
   id: string;
@@ -28,6 +30,8 @@ export type CatalogExercise = {
   muscle_group: string | null;
   measurement_type: MeasurementType;
 };
+
+export type { WorkoutTypeOption };
 
 /** A pair of running shoes the user can attach to a run, with current mileage. */
 export type ShoeOption = {
@@ -40,7 +44,7 @@ export type ShoeOption = {
 export type InitialWorkout = {
   id: string;
   title: string;
-  workoutType: string;
+  workoutTypeId: string | null;
   notes: string;
   performedOn: string; // YYYY-MM-DD
   shoeId: string | null; // currently-attached pair, if any
@@ -91,11 +95,13 @@ function todayIso(): string {
 
 export function WorkoutForm({
   catalog,
+  workoutTypes,
   shoes = [],
   initial,
   prefill,
 }: {
   catalog: CatalogExercise[];
+  workoutTypes: WorkoutTypeOption[];
   shoes?: ShoeOption[];
   initial?: InitialWorkout;
   prefill?: PrefillWorkout;
@@ -103,10 +109,23 @@ export function WorkoutForm({
   const router = useRouter();
   const editing = !!initial;
 
-  const seedType = initial?.workoutType ?? prefill?.workoutType ?? "";
-  const seedTitle = initial?.title ?? prefill?.title ?? "";
+  // The type catalog, held in state so a type added via "+ Add new type…" shows
+  // up immediately. Resolve the seed id: edit mode uses the stored id; a prefill
+  // carries a type NAME (from the coach/plan) we match against the catalog.
+  const [types, setTypes] = useState<WorkoutTypeOption[]>(workoutTypes);
+  const seedTypeId =
+    initial?.workoutTypeId ??
+    (prefill?.workoutType
+      ? workoutTypes.find(
+          (t) => t.name.toLowerCase() === prefill.workoutType!.trim().toLowerCase(),
+        )?.id ?? null
+      : null);
+  const seedTitle =
+    initial?.title ??
+    prefill?.title ??
+    "";
 
-  const [workoutType, setWorkoutType] = useState(seedType);
+  const [workoutTypeId, setWorkoutTypeId] = useState<string | null>(seedTypeId);
   const [title, setTitle] = useState(seedTitle);
   const [titleEdited, setTitleEdited] = useState(!!seedTitle);
   // Notes are the user's own space (how they felt, conditions). We never seed it
@@ -189,19 +208,36 @@ export function WorkoutForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const autoTitle = [todayTitlePrefix(), workoutType].filter(Boolean).join(" ");
+  // Adding a new workout type inline: "__new__" selected in the picker reveals a
+  // name input + emoji grid, mirroring the shoes "+ Add new…" pattern below.
+  const NEW_TYPE = "__new__";
+  const [addingType, setAddingType] = useState(false);
+  const [newTypeName, setNewTypeName] = useState("");
+  const [newTypeEmoji, setNewTypeEmoji] = useState("");
+  const [typePending, startTypeTransition] = useTransition();
+
+  // The selected type's name drives the title autofill, auto-add exercise, and
+  // the shoes section — everything downstream still keys off the name.
+  const workoutTypeName =
+    types.find((t) => t.id === workoutTypeId)?.name ?? "";
+
+  const autoTitle = [todayTitlePrefix(), workoutTypeName]
+    .filter(Boolean)
+    .join(" ");
 
   function makeInstance(exercise: CatalogExercise, autoAdded: boolean): DraftInstance {
     return { uid: nextUid(), exercise, groups: [newGroup()], showOptional: false, autoAdded };
   }
 
-  function chooseType(value: string) {
-    setWorkoutType(value);
-    if (!titleEdited) setTitle(value ? `${todayTitlePrefix()} ${value}` : "");
+  /** Apply the side effects of choosing a type (by name): autofill title and
+   * swap in the single-activity auto-add exercise. */
+  function applyType(id: string | null, name: string) {
+    setWorkoutTypeId(id);
+    if (!titleEdited) setTitle(name ? `${todayTitlePrefix()} ${name}` : "");
 
-    const name = autoExerciseForType(value);
-    const target = name
-      ? catalog.find((e) => e.name.toLowerCase() === name.toLowerCase())
+    const exName = autoExerciseForType(name);
+    const target = exName
+      ? catalog.find((e) => e.name.toLowerCase() === exName.toLowerCase())
       : undefined;
 
     setInstances((prev) => {
@@ -209,6 +245,37 @@ export function WorkoutForm({
       if (!target) return kept;
       if (kept.some((i) => i.exercise.id === target.id)) return kept;
       return [makeInstance(target, true), ...kept];
+    });
+  }
+
+  function chooseType(value: string) {
+    if (value === NEW_TYPE) {
+      setAddingType(true);
+      return;
+    }
+    setAddingType(false);
+    const picked = types.find((t) => t.id === value);
+    applyType(picked?.id ?? null, picked?.name ?? "");
+  }
+
+  function handleAddType() {
+    const name = newTypeName.trim();
+    if (!name || !newTypeEmoji) return;
+    startTypeTransition(async () => {
+      const result = await createWorkoutType(name, newTypeEmoji);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      const t = result.type;
+      // Add (or reuse) in the local catalog, select it, and apply side effects.
+      setTypes((prev) =>
+        prev.some((p) => p.id === t.id) ? prev : [...prev, t],
+      );
+      applyType(t.id, t.name);
+      setAddingType(false);
+      setNewTypeName("");
+      setNewTypeEmoji("");
     });
   }
 
@@ -250,7 +317,7 @@ export function WorkoutForm({
   function buildPayload(): SavePayload {
     // Shoes only apply to runs; for any other type we send nothing (and clear
     // any previously-attached pair on edit by sending no shoe fields → null).
-    const running = isRunningType(workoutType);
+    const running = isRunningType(workoutTypeName);
     const addingNew = running && shoeId === NEW_SHOE;
     const existing = running && shoeId && shoeId !== NEW_SHOE ? shoeId : undefined;
     const newName = addingNew ? newShoeName.trim() : "";
@@ -258,7 +325,8 @@ export function WorkoutForm({
 
     return {
       title: title || undefined,
-      workoutType: workoutType || undefined,
+      workoutTypeId: workoutTypeId || undefined,
+      workoutTypeName: workoutTypeName || undefined,
       notes: notes || undefined,
       performedOn,
       planId: prefill?.planId,
@@ -320,16 +388,61 @@ export function WorkoutForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <label className="block space-y-1.5">
+      <div className="space-y-1.5">
         <span className="text-sm font-medium">Workout type</span>
-        <Combobox
-          options={WORKOUT_TYPE_PRESETS.map((t) => ({ value: t, label: t }))}
-          placeholder="e.g. Run, Gym, Bike…"
-          allowFreeText
-          value={workoutType}
-          onChange={chooseType}
-        />
-      </label>
+        <select
+          value={addingType ? NEW_TYPE : workoutTypeId ?? ""}
+          onChange={(e) => chooseType(e.target.value)}
+          className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-base text-ink focus:border-rust focus:outline-none"
+        >
+          <option value="">No type</option>
+          {types.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.emoji} {t.name}
+            </option>
+          ))}
+          <option value={NEW_TYPE}>+ Add new type…</option>
+        </select>
+
+        {addingType && (
+          <div className="space-y-2 rounded-xl border border-line bg-surface p-3">
+            <label className="block space-y-0.5">
+              <span className="text-xs text-faint">Name</span>
+              <input
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                placeholder="e.g. Pilates"
+                className="w-full rounded-xl border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+              />
+            </label>
+            <div className="space-y-0.5">
+              <span className="text-xs text-faint">Emoji</span>
+              <EmojiPicker value={newTypeEmoji} onChange={setNewTypeEmoji} />
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleAddType}
+                disabled={!newTypeName.trim() || !newTypeEmoji || typePending}
+                className="rounded-full bg-rust px-4 py-1.5 text-sm font-medium text-on-rust disabled:opacity-50"
+              >
+                {typePending ? "Adding…" : "Add type"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingType(false);
+                  setNewTypeName("");
+                  setNewTypeEmoji("");
+                }}
+                className="text-sm text-muted hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-3">
         <label className="flex-1 space-y-1.5">
@@ -358,7 +471,7 @@ export function WorkoutForm({
       </label>
 
       {/* Shoes: running workouts only, always optional. */}
-      {isRunningType(workoutType) && (
+      {isRunningType(workoutTypeName) && (
         <div className="space-y-1.5">
           <span className="text-sm font-medium">Shoes (optional)</span>
           <select

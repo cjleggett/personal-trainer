@@ -57,6 +57,16 @@ Adding new exercises — use the create_exercise tool:
   when unsure it's safe to call. Create the exercise BEFORE or as part of the
   turn where you recommend it, so it's ready for them to log.
 
+Adding new workout types — use the create_workout_type tool:
+- A workout's TYPE (e.g. Running, Gym, Soccer) is picked from a shared catalog,
+  listed in the context below. When you draftWorkout with a 'workoutType' that is
+  NOT already in that list, you MUST call create_workout_type for it THIS turn,
+  before you finish, using the SAME name you put in 'workoutType'.
+- You MUST supply an emoji for the type — it becomes the type's icon in the
+  athlete's history. Pick one that represents the activity.
+- The tool reuses an existing same-named type rather than duplicating, so when
+  unsure it's safe to call. Prefer an existing type over inventing a near-synonym.
+
 Every turn, decide which ONE of these actions fits best:
 
 1. reply — Just talk. Use this for questions, advice, reassurance, or when you
@@ -98,6 +108,8 @@ Every turn, decide which ONE of these actions fits best:
    - Any exercise you name in 'exercises' must be a loggable catalog option. If a
      movement isn't already in the catalog above, call create_exercise for it
      THIS turn (see the rules above) using the SAME name you put in 'exercises'.
+   - Likewise, 'workoutType' must be a catalog type. If it isn't already listed,
+     call create_workout_type (name + emoji) THIS turn using the SAME name.
    - When you prescribe concrete weights, base them on the athlete's recent loads
      (look them up first — see the history-tool rules). Don't invent numbers they
      didn't imply, but a sensible working weight from their history is expected.
@@ -139,6 +151,7 @@ export function buildCoachContext(input: {
   historySummary: string; // last 90 days, aggregate
   recentDetail: string; // last ~10 days, per-workout detail + notes
   exerciseCatalog: string; // the loggable exercise catalog, grouped by type
+  workoutTypeCatalog: string; // the workout-type catalog, with emojis
   firstMessage: string;
 }): string {
   const planBlock = input.planJson
@@ -167,6 +180,10 @@ ${input.exerciseCatalog}
 (If you recommend a movement that is NOT in this list, add it with the
 create_exercise tool so the athlete can log it. Never claim you added an
 exercise unless you actually called the tool this turn.)
+
+${input.workoutTypeCatalog}
+(If you draft a workout whose type is NOT in this list, add it with the
+create_workout_type tool — name + emoji — this turn.)
 
 The athlete says:
 """

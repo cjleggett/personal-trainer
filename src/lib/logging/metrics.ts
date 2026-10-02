@@ -68,7 +68,8 @@ export const DEFAULT_SET_COUNT: Record<MeasurementType, number> = {
   time_only: 1,
 };
 
-/** Common workout types offered in the picker. Free text — users may type others. */
+/** Common workout types, used only as a fallback for `inferWorkoutType` now that
+ * the picker is driven by the `workout_types` catalog. */
 export const WORKOUT_TYPE_PRESETS = [
   "Gym",
   "Run",
@@ -79,6 +80,19 @@ export const WORKOUT_TYPE_PRESETS = [
   "Hike",
   "Yoga",
   "Soccer",
+] as const;
+
+/** Emoji shown for a workout with no type (or a legacy row that never had one). */
+export const DEFAULT_WORKOUT_EMOJI = "💪";
+
+/** Curated grid of activity emojis offered when adding a new workout type. Both
+ * the logging form's picker and the coach's create_workout_type tool draw from
+ * this set so stored emojis stay consistent and render reliably. */
+export const WORKOUT_TYPE_EMOJIS = [
+  "🏃", "🚶", "🥾", "🚴", "🏊", "🧗", "⛷️", "🏂", "🛹", "⛸️",
+  "🏋️", "🤸", "🧘", "🥊", "🚣", "🏄", "🤿", "🏇", "⛳", "🎿",
+  "⚽", "🏀", "🏈", "⚾", "🥎", "🏐", "🏉", "🎾", "🏓", "🏸",
+  "🥍", "🏒", "🏑", "🥅", "🥏", "🎳", "💃", "💪",
 ] as const;
 
 /**

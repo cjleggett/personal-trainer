@@ -17,6 +17,7 @@ import {
   historySummary,
   recentDetailedWorkouts,
   exerciseCatalogSummary,
+  workoutTypeCatalogSummary,
 } from "@/lib/logging/aggregates";
 import { weekDateRanges } from "@/lib/logging/plan-dates";
 
@@ -127,13 +128,15 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
 
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
-  const [row, profile, history, recentDetail, catalog] = await Promise.all([
-    loadActivePlan(supabase),
-    profileSummary(supabase, user.id),
-    historySummary(supabase, user.id, now),
-    recentDetailedWorkouts(supabase, user.id, now, 10),
-    exerciseCatalogSummary(supabase),
-  ]);
+  const [row, profile, history, recentDetail, catalog, typeCatalog] =
+    await Promise.all([
+      loadActivePlan(supabase),
+      profileSummary(supabase, user.id),
+      historySummary(supabase, user.id, now),
+      recentDetailedWorkouts(supabase, user.id, now, 10),
+      exerciseCatalogSummary(supabase),
+      workoutTypeCatalogSummary(supabase),
+    ]);
 
   let planJson: string | null = null;
   let weekDates: ReturnType<typeof weekDateRanges> = [];
@@ -155,6 +158,7 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
     historySummary: history,
     recentDetail,
     exerciseCatalog: catalog,
+    workoutTypeCatalog: typeCatalog,
     firstMessage,
   });
 
