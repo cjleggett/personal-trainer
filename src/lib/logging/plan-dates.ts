@@ -33,7 +33,22 @@ export function addDays(iso: string, n: number): string {
   return toIso(new Date(parseIso(iso).getTime() + n * DAY_MS));
 }
 
-/** The Monday on or after `iso` — the plan's calendar anchor. */
+/**
+ * Today's date as YYYY-MM-DD in a given IANA timezone (e.g. "America/New_York").
+ * Server renders run in UTC, so `new Date().toISOString()` would roll over to
+ * tomorrow in the evening for zones behind UTC; computing in the user's zone
+ * fixes "Today"/"Tomorrow" labels. Falls back to UTC if `timeZone` is missing or
+ * invalid. en-CA formats as YYYY-MM-DD.
+ */
+export function todayInTimeZone(timeZone?: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+/** The Monday on or after `iso` — the default calendar anchor for a new plan. */
 export function nextMonday(iso: string): string {
   const dow = parseIso(iso).getUTCDay(); // 0=Sun..6=Sat
   // Days until Monday (1). If already Monday, start today.

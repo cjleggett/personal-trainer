@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   METRIC_FIELDS,
+  METERS_PER_MILE,
   todayTitlePrefix,
   type MeasurementType,
 } from "@/lib/logging/metrics";
@@ -29,6 +30,14 @@ export type SavePayload = {
   /** When logged from a training plan, the plan and the dated day it fulfills. */
   planId?: string;
   planDayDate?: string; // YYYY-MM-DD
+  /**
+   * Optional running shoes (running workouts only). Either an existing shoe's id
+   * (`shoeId`), or a new shoe to create by name with an optional starting
+   * mileage in miles (`shoeName` + `shoeStartingMi`). Omit all for no shoe.
+   */
+  shoeId?: string;
+  shoeName?: string;
+  shoeStartingMi?: number;
   instances: InstancePayload[];
 };
 
@@ -86,6 +95,41 @@ function instanceRows(
   }));
 }
 
+/**
+ * Resolve the payload's optional shoe into a `shoe_id` to store on the workout:
+ *   - `shoeId` set        → use it (an existing pair; RLS guards ownership).
+ *   - `shoeName` set      → create a new pair (starting mileage mi → meters).
+ *   - neither             → null (no shoe attached).
+ * Returns `{ shoeId }` on success, or `{ error }` if a create fails. Creating a
+ * shoe is best-effort-validated: a blank name resolves to no shoe rather than an
+ * error, so an accidentally-empty field never blocks saving the workout.
+ */
+async function resolveShoeId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  payload: SavePayload,
+): Promise<{ shoeId: string | null } | { error: string }> {
+  if (payload.shoeId) return { shoeId: payload.shoeId };
+
+  const name = payload.shoeName?.trim();
+  if (!name) return { shoeId: null };
+
+  const startingM =
+    payload.shoeStartingMi && payload.shoeStartingMi > 0
+      ? payload.shoeStartingMi * METERS_PER_MILE
+      : 0;
+
+  const { data, error } = await supabase
+    .from("shoes")
+    .insert({ user_id: userId, name, starting_distance_m: startingM })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return { error: error?.message ?? "Could not save the shoes." };
+  }
+  return { shoeId: data.id };
+}
+
 export async function createWorkout(payload: SavePayload) {
   const supabase = await createClient();
   const {
@@ -100,6 +144,9 @@ export async function createWorkout(payload: SavePayload) {
 
   const { workoutType, title, performedAt } = buildWorkoutFields(payload);
 
+  const shoe = await resolveShoeId(supabase, user.id, payload);
+  if ("error" in shoe) return { error: shoe.error };
+
   const { data: workout, error: wErr } = await supabase
     .from("workouts")
     .insert({
@@ -107,6 +154,7 @@ export async function createWorkout(payload: SavePayload) {
       title,
       workout_type: workoutType,
       notes: payload.notes?.trim() || null,
+      shoe_id: shoe.shoeId,
       ...(performedAt ? { performed_at: performedAt } : {}),
       ...(payload.planId ? { plan_id: payload.planId } : {}),
       ...(payload.planDayDate ? { plan_day_date: payload.planDayDate } : {}),
@@ -144,12 +192,16 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
 
   const { workoutType, title, performedAt } = buildWorkoutFields(payload);
 
+  const shoe = await resolveShoeId(supabase, user.id, payload);
+  if ("error" in shoe) return { error: shoe.error };
+
   const { error: wErr } = await supabase
     .from("workouts")
     .update({
       title,
       workout_type: workoutType,
       notes: payload.notes?.trim() || null,
+      shoe_id: shoe.shoeId, // null clears a previously-attached pair
       ...(performedAt ? { performed_at: performedAt } : {}),
     })
     .eq("id", workoutId); // RLS ensures only the owner's row matches

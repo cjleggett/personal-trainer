@@ -1,5 +1,5 @@
-import { generateObject } from "ai";
-import type { ModelMessage } from "ai";
+import { generateObject, generateText, Output, stepCountIs } from "ai";
+import type { ModelMessage, ToolSet, LanguageModelUsage } from "ai";
 import type { z } from "zod";
 import { generationModel, GENERATION_MODEL_ID } from "./config";
 import { recordTokenUsage } from "@/lib/logging/token-usage";
@@ -52,6 +52,24 @@ function friendlyMessage(err: unknown): string {
 }
 
 /**
+ * Prepend a current-date line to a system prompt. Done centrally here so EVERY
+ * model call (coach, intake, plan) is grounded in today's date on every turn —
+ * not just the opening user message, where it scrolls out of attention on long
+ * or resumed conversations and the model loses track of what day it is. Includes
+ * the weekday since that's the usual point of confusion. Computed server-side at
+ * call time (the app's runtime TZ).
+ */
+function withCurrentDate(system: string): string {
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  return `Today's date is ${today}.\n\n${system}`;
+}
+
+/**
  * Run `generateObject` against the configured model with a timeout and
  * normalized error handling. `schema` is a Zod schema; either `messages` or a
  * one-shot `prompt` may be supplied, alongside a `system` prompt.
@@ -65,6 +83,7 @@ export async function generateValidated<T>(input: {
   feature?: string;
 }): Promise<GenerateResult<T>> {
   const abortSignal = AbortSignal.timeout(GENERATE_TIMEOUT_MS);
+  const system = withCurrentDate(input.system);
   try {
     // The SDK types require messages XOR prompt as concrete keys (not a
     // conditional spread), so branch on which the caller supplied.
@@ -72,32 +91,79 @@ export async function generateValidated<T>(input: {
       ? await generateObject({
           model: generationModel,
           schema: input.schema,
-          system: input.system,
+          system,
           messages: input.messages,
           abortSignal,
         })
       : await generateObject({
           model: generationModel,
           schema: input.schema,
-          system: input.system,
+          system,
           prompt: input.prompt ?? "",
           abortSignal,
         });
 
     // Record usage best-effort — never let accounting break the generation.
-    const u = result.usage;
-    await recordTokenUsage({
-      model: GENERATION_MODEL_ID,
-      feature: input.feature ?? null,
-      usage: {
-        inputTokens: u.inputTokens ?? 0,
-        outputTokens: u.outputTokens ?? 0,
-        cacheReadTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
-        cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
-      },
-    });
+    await logUsage(result.usage, input.feature);
 
     return { ok: true, object: result.object };
+  } catch (err) {
+    return { ok: false, error: friendlyMessage(err) };
+  }
+}
+
+/** Record a model call's token usage best-effort (see recordTokenUsage). */
+async function logUsage(u: LanguageModelUsage, feature?: string) {
+  await recordTokenUsage({
+    model: GENERATION_MODEL_ID,
+    feature: feature ?? null,
+    usage: {
+      inputTokens: u.inputTokens ?? 0,
+      outputTokens: u.outputTokens ?? 0,
+      cacheReadTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
+      cacheWriteTokens: u.inputTokenDetails?.cacheWriteTokens ?? 0,
+    },
+  });
+}
+
+/** Default cap on model↔tool round-trips within a single turn. Enough for the
+ * coach to run a few queries and then answer; bounds cost and stops loops. */
+export const DEFAULT_MAX_STEPS = 6;
+
+/**
+ * Like `generateValidated`, but lets the model call `tools` mid-turn before
+ * producing its final answer. Uses `generateText` with a structured `output`
+ * (so the final result still validates against `schema`) and a step cap so the
+ * tool loop always terminates. Token usage is summed across every step.
+ *
+ * Use this when the model needs to fetch data to answer — e.g. the coach
+ * querying the athlete's history. Same timeout + friendly-error contract.
+ */
+export async function generateValidatedWithTools<T>(input: {
+  schema: z.ZodType<T>;
+  system: string;
+  messages: ModelMessage[];
+  tools: ToolSet;
+  maxSteps?: number;
+  /** Tags the token-usage record so the /usage page can break down by feature. */
+  feature?: string;
+}): Promise<GenerateResult<T>> {
+  const abortSignal = AbortSignal.timeout(GENERATE_TIMEOUT_MS);
+  try {
+    const result = await generateText({
+      model: generationModel,
+      system: withCurrentDate(input.system),
+      messages: input.messages,
+      tools: input.tools,
+      stopWhen: stepCountIs(input.maxSteps ?? DEFAULT_MAX_STEPS),
+      output: Output.object({ schema: input.schema }),
+      abortSignal,
+    });
+
+    // `totalUsage` sums every step (each tool round-trip is its own model call).
+    await logUsage(result.totalUsage, input.feature);
+
+    return { ok: true, object: result.output };
   } catch (err) {
     return { ok: false, error: friendlyMessage(err) };
   }

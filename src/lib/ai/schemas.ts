@@ -43,19 +43,49 @@ export type Workout = z.infer<typeof workoutSchema>;
 // SERVER assigns real calendar dates deterministically (LLMs are unreliable at
 // multi-week date math), so this schema deliberately has no date fields.
 
-/** One day in the plan skeleton. Either a session (with a focus/target) or rest. */
+/** The seven weekdays, Monday→Sunday. Shared by the plan skeleton and the
+ * day-level enrichment pass (which references a day by week + weekday). */
+export const weekdayEnum = z.enum([
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+]);
+
+/**
+ * A single prescribed exercise within a plan day (filled in by the enrichment
+ * pass for sessions that warrant detail, e.g. a gym day). Deliberately carries a
+ * rep scheme but NOT pinned weights — exact loads are still chosen on the day
+ * from recent logs. The {name, target, notes} shape matches the logging prefill,
+ * so a plan day's exercises seed the new-workout form directly.
+ */
+export const prescribedExerciseSchema = z.object({
+  name: z
+    .string()
+    .describe(
+      "Exercise name as it would appear in the catalog, e.g. 'Barbell Back Squat', 'Single-Leg Romanian Deadlift'.",
+    ),
+  target: z
+    .string()
+    .describe(
+      "Sets × reps or duration, e.g. '4x8', '3x12 each leg', '3x30s hold'. A rough intensity cue is fine ('RPE 7', 'moderate'), but do NOT pin exact weights — those are chosen on the day.",
+    ),
+  notes: z
+    .string()
+    .nullable()
+    .describe("Optional short coaching cue for this movement, or null."),
+});
+
+export type PrescribedExercise = z.infer<typeof prescribedExerciseSchema>;
+
+/** One day in the plan skeleton. Either a session (with a focus/target) or rest.
+ * `exercises` is empty in the raw skeleton and filled in later by the enrichment
+ * pass only for days that benefit from a concrete movement list. */
 export const planDaySchema = z.object({
-  dayOfWeek: z
-    .enum([
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-      "Sunday",
-    ])
-    .describe("Which weekday this slot falls on"),
+  dayOfWeek: weekdayEnum.describe("Which weekday this slot falls on"),
   isRestDay: z.boolean().describe("True for a rest/recovery day"),
   focus: z
     .string()
@@ -66,6 +96,12 @@ export const planDaySchema = z.object({
     .string()
     .describe(
       "High-level target for the day, e.g. '8 mi @ easy pace', '4x8 squats progressive', or 'full rest'. NOT specific weights — those are chosen on the day.",
+    ),
+  exercises: z
+    .array(prescribedExerciseSchema)
+    .default([])
+    .describe(
+      "Specific movements for the day, when it warrants them (a gym/strength day, a circuit). Empty for a simple single-activity day (e.g. an easy run), which the focus + target already describe fully.",
     ),
 });
 
@@ -117,6 +153,36 @@ export type TrainingPlan = z.infer<typeof trainingPlanSchema>;
 export type PlanWeek = z.infer<typeof planWeekSchema>;
 export type PlanDay = z.infer<typeof planDaySchema>;
 
+// ── Plan enrichment (second pass: add exercises to detail-worthy days) ────────
+//
+// After the skeleton is generated, a focused pass fills in concrete exercises for
+// the days that benefit (gym/strength sessions, circuits) and leaves simple days
+// (an easy run) alone. To keep it cheap and non-destructive, the model does NOT
+// re-emit the whole plan — it returns only the days to enrich, each addressed by
+// week + weekday, and the server merges the exercise lists back into the skeleton
+// (dates, focus, targets, and all other days are untouched). See prompts/plan.ts.
+
+/** One enriched day: which slot it is, plus the exercises to attach to it. */
+export const enrichedDaySchema = z.object({
+  weekNumber: z.number().int().positive().describe("1-based week index of the day to enrich"),
+  dayOfWeek: weekdayEnum.describe("Which weekday within that week to enrich"),
+  exercises: z
+    .array(prescribedExerciseSchema)
+    .min(1)
+    .describe("The concrete movements for this day, in order."),
+});
+
+export const planEnrichmentSchema = z.object({
+  days: z
+    .array(enrichedDaySchema)
+    .default([])
+    .describe(
+      "Only the days that warrant a concrete exercise list (gym/strength days, circuits). Omit simple single-activity days (easy runs, rest) entirely — leaving them high-level is correct.",
+    ),
+});
+
+export type PlanEnrichment = z.infer<typeof planEnrichmentSchema>;
+
 // ── Coach chat (conversational, action-routing) ──────────────────────────────
 //
 // The dashboard coach is a general assistant: the user says anything ("my quad
@@ -131,8 +197,29 @@ export type PlanDay = z.infer<typeof planDaySchema>;
 //                    prefilled logging form so they can edit and save.
 // The voice and routing rules live in `src/lib/ai/prompts/coach.ts`.
 
+/** One prescribed exercise within a drafted workout. Seeds its own card in the
+ * logging form: `name` is matched to the catalog, `target` is parsed into sets. */
+export const draftExerciseSchema = z.object({
+  name: z
+    .string()
+    .describe(
+      "Exercise name as it appears in the catalog, e.g. 'Barbell Back Squat', 'Bench Press'. If it's not already an option, add it with create_exercise this turn.",
+    ),
+  target: z
+    .string()
+    .describe(
+      "Per-exercise target to seed the sets, e.g. '4x8 @ 135 lb', '3x10', '5 min plank'. Best-effort; the user edits before saving.",
+    ),
+  notes: z
+    .string()
+    .nullable()
+    .describe("Optional coaching cue or substitution for this exercise, or null."),
+});
+
 /** A workout the coach proposes for logging. Loose, display-oriented fields that
- * feed the existing new-workout prefill (type + title + a high-level target). */
+ * feed the existing new-workout prefill. For a multi-exercise session (e.g. a gym
+ * day) populate `exercises` so each movement becomes a prefilled card; for a
+ * single-activity session (a run) `exercises` may be empty and `target` seeds it. */
 export const workoutDraftSchema = z.object({
   workoutType: z
     .string()
@@ -143,13 +230,21 @@ export const workoutDraftSchema = z.object({
   target: z
     .string()
     .describe(
-      "High-level target to seed the form, e.g. '3 mi @ easy', '45 min', '4x8'. Best-effort; the user edits before saving.",
+      "High-level target for the whole session to seed the form, e.g. '3 mi @ easy', '45 min', '4x8'. Best-effort; the user edits before saving.",
+    ),
+  exercises: z
+    .array(draftExerciseSchema)
+    .default([])
+    .describe(
+      "The specific exercises to prefill, in order. REQUIRED for a gym/strength session so each movement is ready to log; leave empty for a single-activity session (e.g. a run) where `target` alone suffices.",
     ),
   notes: z
     .string()
     .nullable()
     .describe("Optional note to prefill, or null."),
 });
+
+export type DraftExercise = z.infer<typeof draftExerciseSchema>;
 
 export type WorkoutDraft = z.infer<typeof workoutDraftSchema>;
 
@@ -188,6 +283,12 @@ export const coachTurnSchema = z.discriminatedUnion("kind", [
     plan: trainingPlanSchema.describe(
       "The FULL revised plan. Preserve everything the user did not ask to change; keep the same number of weeks and the Monday→Sunday day order.",
     ),
+    newStartDate: z
+      .string()
+      .nullable()
+      .describe(
+        "Set ONLY when the user wants to shift WHEN the plan begins (e.g. 'start a week earlier', 'begin Sep 28'). The date (YYYY-MM-DD) Week 1 Day 1 should fall on; every plan day shifts by the same offset. Use the calendar reference above to pick it — don't guess. Shifting the start does not add or remove weeks; change the week count via `plan` if the goal date needs it. Return null to keep the current start date (the usual case).",
+      ),
     updatedCoachNotes,
   }),
   z.object({

@@ -8,7 +8,11 @@ import {
   todayTitlePrefix,
   autoExerciseForType,
   parseTargetToMetrics,
+  minutesToMinSec,
+  minSecToMinutes,
+  isRunningType,
   type MeasurementType,
+  type MetricField,
 } from "@/lib/logging/metrics";
 import {
   createWorkout,
@@ -25,6 +29,13 @@ export type CatalogExercise = {
   measurement_type: MeasurementType;
 };
 
+/** A pair of running shoes the user can attach to a run, with current mileage. */
+export type ShoeOption = {
+  id: string;
+  name: string;
+  distanceMi: number;
+};
+
 // For edit mode: the existing workout reshaped into the form's draft model.
 export type InitialWorkout = {
   id: string;
@@ -32,6 +43,7 @@ export type InitialWorkout = {
   workoutType: string;
   notes: string;
   performedOn: string; // YYYY-MM-DD
+  shoeId: string | null; // currently-attached pair, if any
   instances: {
     exerciseId: string;
     groups: { count: string; metrics: Record<string, string> }[];
@@ -44,9 +56,11 @@ export type InitialWorkout = {
 export type PrefillWorkout = {
   title?: string;
   workoutType?: string;
-  notes?: string;
   /** The plan day's high-level target (e.g. "8 mi @ easy"); parsed to seed sets. */
   target?: string;
+  /** Specific exercises to seed as cards (from the coach's drafted gym day). Each
+   * is matched to the catalog by name; its `target` seeds that card's sets. */
+  exercises?: { name: string; target?: string; notes?: string }[];
   planId?: string;
   planDayDate?: string; // YYYY-MM-DD
 };
@@ -77,10 +91,12 @@ function todayIso(): string {
 
 export function WorkoutForm({
   catalog,
+  shoes = [],
   initial,
   prefill,
 }: {
   catalog: CatalogExercise[];
+  shoes?: ShoeOption[];
   initial?: InitialWorkout;
   prefill?: PrefillWorkout;
 }) {
@@ -93,10 +109,21 @@ export function WorkoutForm({
   const [workoutType, setWorkoutType] = useState(seedType);
   const [title, setTitle] = useState(seedTitle);
   const [titleEdited, setTitleEdited] = useState(!!seedTitle);
-  const [notes, setNotes] = useState(initial?.notes ?? prefill?.notes ?? "");
+  // Notes are the user's own space (how they felt, conditions). We never seed it
+  // from a prefill (coach draft / plan target) — only an existing workout's own
+  // notes populate it, when editing.
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [performedOn, setPerformedOn] = useState(
     initial?.performedOn ?? todayIso(),
   );
+
+  // Shoes (running workouts only). `shoeId` is the chosen existing pair ("" =
+  // none). When adding a new pair, `shoeId` is "__new__" and the name/starting
+  // mileage inputs appear. Seeded from the edited workout's attached pair.
+  const NEW_SHOE = "__new__";
+  const [shoeId, setShoeId] = useState<string>(initial?.shoeId ?? "");
+  const [newShoeName, setNewShoeName] = useState("");
+  const [newShoeStartMi, setNewShoeStartMi] = useState("");
   const [instances, setInstances] = useState<DraftInstance[]>(() => {
     if (initial) {
       return initial.instances.flatMap((si) => {
@@ -113,6 +140,41 @@ export function WorkoutForm({
         ];
       });
     }
+    // Build a draft card for an exercise, seeding its first set from a target.
+    const seedInstance = (
+      exercise: CatalogExercise,
+      target?: string,
+    ): DraftInstance => {
+      const parsed = target
+        ? parseTargetToMetrics(exercise.measurement_type, target)
+        : null;
+      const group: SetGroupRow = parsed
+        ? { count: parsed.count ?? "1", metrics: parsed.metrics }
+        : newGroup();
+      return {
+        uid: nextUid(),
+        exercise,
+        groups: [group],
+        showOptional: false,
+        autoAdded: true,
+      };
+    };
+
+    // Coach-drafted gym day: one card per prescribed exercise, matched to the
+    // catalog by name, each seeded from its own target. Exercises the coach
+    // named but that aren't in the catalog are skipped (should be rare — the
+    // coach is told to create_exercise first).
+    if (prefill?.exercises?.length) {
+      const seeded = prefill.exercises.flatMap((ex) => {
+        const exercise = catalog.find(
+          (e) => e.name.toLowerCase() === ex.name.trim().toLowerCase(),
+        );
+        return exercise ? [seedInstance(exercise, ex.target)] : [];
+      });
+      if (seeded.length) return seeded;
+      // Fall through to the single-activity seed if none matched.
+    }
+
     // Create mode: seed the auto-add exercise for a single-activity prefill type
     // (e.g. a "Run" plan day), mirroring what chooseType does interactively.
     const name = prefill?.workoutType
@@ -122,22 +184,7 @@ export function WorkoutForm({
       ? catalog.find((e) => e.name.toLowerCase() === name.toLowerCase())
       : undefined;
     if (!exercise) return [];
-    // Seed the first set from the plan day's target (e.g. distance/duration).
-    const parsed = prefill?.target
-      ? parseTargetToMetrics(exercise.measurement_type, prefill.target)
-      : null;
-    const group: SetGroupRow = parsed
-      ? { count: parsed.count ?? "1", metrics: parsed.metrics }
-      : newGroup();
-    return [
-      {
-        uid: nextUid(),
-        exercise,
-        groups: [group],
-        showOptional: false,
-        autoAdded: true,
-      },
-    ];
+    return [seedInstance(exercise, prefill?.target)];
   });
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -201,6 +248,14 @@ export function WorkoutForm({
     setInstances((prev) => prev.filter((i) => i.uid !== uid));
 
   function buildPayload(): SavePayload {
+    // Shoes only apply to runs; for any other type we send nothing (and clear
+    // any previously-attached pair on edit by sending no shoe fields → null).
+    const running = isRunningType(workoutType);
+    const addingNew = running && shoeId === NEW_SHOE;
+    const existing = running && shoeId && shoeId !== NEW_SHOE ? shoeId : undefined;
+    const newName = addingNew ? newShoeName.trim() : "";
+    const startMi = Number(newShoeStartMi);
+
     return {
       title: title || undefined,
       workoutType: workoutType || undefined,
@@ -208,6 +263,12 @@ export function WorkoutForm({
       performedOn,
       planId: prefill?.planId,
       planDayDate: prefill?.planDayDate,
+      shoeId: existing,
+      shoeName: newName || undefined,
+      shoeStartingMi:
+        addingNew && newShoeStartMi.trim() !== "" && !Number.isNaN(startMi)
+          ? startMi
+          : undefined,
       instances: instances.map((inst) => ({
         exerciseId: inst.exercise.id,
         measurementType: inst.exercise.measurement_type,
@@ -295,6 +356,53 @@ export function WorkoutForm({
           className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
         />
       </label>
+
+      {/* Shoes: running workouts only, always optional. */}
+      {isRunningType(workoutType) && (
+        <div className="space-y-1">
+          <span className="text-sm font-medium">Shoes (optional)</span>
+          <select
+            value={shoeId}
+            onChange={(e) => setShoeId(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">No shoes</option>
+            {shoes.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.distanceMi} mi)
+              </option>
+            ))}
+            <option value={NEW_SHOE}>+ Add new shoes…</option>
+          </select>
+
+          {shoeId === NEW_SHOE && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <label className="flex-1 space-y-0.5">
+                <span className="text-xs text-zinc-500">Name</span>
+                <input
+                  value={newShoeName}
+                  onChange={(e) => setNewShoeName(e.target.value)}
+                  placeholder="e.g. Nike Pegasus 40"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+              <label className="w-32 space-y-0.5">
+                <span className="text-xs text-zinc-500">Starting mileage (mi)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.1}
+                  value={newShoeStartMi}
+                  onChange={(e) => setNewShoeStartMi(e.target.value)}
+                  placeholder="0"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+          )}
+        </div>
+      )}
 
       {instances.map((inst) => (
         <InstanceCard
@@ -401,25 +509,19 @@ function InstanceCard({
 
       <div className="space-y-2">
         {instance.groups.map((group, gi) => (
-          <div key={gi} className="flex flex-wrap items-end gap-2">
+          // Top-aligned so every input box lines up on its top edge regardless of
+          // what sits below it (the duration field hangs MM/SS captions under its
+          // inputs). The remove button re-pins itself to the bottom via self-end.
+          <div key={gi} className="flex flex-wrap items-start gap-2">
             {visibleFields.map((field) => (
-              <label key={field.key} className="flex-1 space-y-0.5">
-                <span className="text-xs text-zinc-500">
-                  {field.label}
-                  {field.unit ? ` (${field.unit})` : ""}
-                  {field.optional ? "" : " *"}
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step={field.step}
-                  value={group.metrics[field.key] ?? ""}
-                  onChange={(e) =>
-                    onUpdateMetric(instance.uid, gi, field.key, e.target.value)
-                  }
-                  className="w-full rounded-md border border-zinc-300 px-2 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
-                />
-              </label>
+              <MetricInput
+                key={field.key}
+                field={field}
+                value={group.metrics[field.key] ?? ""}
+                onChange={(value) =>
+                  onUpdateMetric(instance.uid, gi, field.key, value)
+                }
+              />
             ))}
             <label className="w-16 space-y-0.5">
               <span className="text-xs text-zinc-500">Sets</span>
@@ -436,7 +538,7 @@ function InstanceCard({
             {instance.groups.length > 1 && (
               <button
                 onClick={() => onRemoveGroup(instance.uid, gi)}
-                className="pb-2 text-sm text-zinc-400 hover:text-red-600"
+                className="self-end pb-2 text-sm text-zinc-400 hover:text-red-600"
                 aria-label="Remove row"
                 title="Remove row"
               >
@@ -464,5 +566,95 @@ function InstanceCard({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * One metric field's input. Most fields are a single decimal input, but a
+ * duration field (`minSec`) renders as paired minutes + seconds inputs for
+ * convenience — the value it reads/writes is still DISPLAY-MINUTES (e.g. "2.5"),
+ * so the rest of the form, the save conversion, and stored data are unchanged.
+ */
+function MetricInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: MetricField;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const labelText = `${field.label}${field.optional ? "" : " *"}`;
+
+  if (field.minSec) {
+    // Render as a MM:SS clock. The displayed value is still DISPLAY-MINUTES under
+    // the hood; empty shows "00" so the field reads "00:00" and invites editing.
+    const { min, sec } = minutesToMinSec(value);
+    // Text inputs (not number) so the zero-padded "00" actually renders — number
+    // inputs strip leading zeros. We keep only digits from each field.
+    const pad2 = (n: string) => (n === "" ? "00" : n.padStart(2, "0"));
+    const digits = (s: string) => s.replace(/\D/g, "");
+    const commit = (m: string, s: string) => onChange(minSecToMinutes(m, s));
+    const timeInput =
+      "w-10 rounded-md border border-zinc-300 px-1.5 py-2 text-center text-base tabular-nums dark:border-zinc-700 dark:bg-zinc-900";
+    return (
+      <div className="space-y-0.5">
+        <span className="text-xs text-zinc-500">{labelText}</span>
+        <div className="flex items-start gap-1">
+          <div className="flex flex-col items-center">
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label={`${field.label} minutes`}
+              value={pad2(min)}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => commit(digits(e.target.value), sec)}
+              className={timeInput}
+            />
+            <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+              MM
+            </span>
+          </div>
+          <span
+            aria-hidden
+            className="pt-2 text-base font-medium text-zinc-500"
+          >
+            :
+          </span>
+          <div className="flex flex-col items-center">
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label={`${field.label} seconds`}
+              value={pad2(sec)}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => commit(min, digits(e.target.value))}
+              className={timeInput}
+            />
+            <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+              SS
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <label className="flex-1 space-y-0.5">
+      <span className="text-xs text-zinc-500">
+        {field.label}
+        {field.unit ? ` (${field.unit})` : ""}
+        {field.optional ? "" : " *"}
+      </span>
+      <input
+        type="number"
+        inputMode="decimal"
+        step={field.step}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-zinc-300 px-2 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+      />
+    </label>
   );
 }

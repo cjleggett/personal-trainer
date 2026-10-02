@@ -83,3 +83,79 @@ respect their availability, fixed days, and constraints, and output every week
 Monday→Sunday.
 `.trim();
 }
+
+// ── Enrichment pass (fill concrete exercises into detail-worthy days) ─────────
+//
+// The skeleton deliberately stays high-level, but some days — a gym/strength
+// session, a circuit — are much more useful with a concrete movement list the
+// athlete can log directly. This pass runs AFTER the skeleton and adds exercises
+// only where they help, at the model's discretion. It never pins exact weights
+// (chosen on the day) and never touches dates or other days.
+
+export const PLAN_ENRICHMENT_SYSTEM_PROMPT = `
+You are the same expert coach, now adding a layer of useful detail to a plan you
+just designed. The plan is a high-level skeleton: each day has a focus and a
+high-level target. Your job is to fill in CONCRETE EXERCISES for the days where a
+specific movement list genuinely helps the athlete — and to leave the rest alone.
+
+Use your judgment about which days warrant detail:
+- DO enrich strength/gym days, circuits, and mobility/rehab sessions — anything
+  that is really a list of distinct movements (e.g. "lower-body strength" →
+  squats, step-ups, single-leg RDLs, calf raises, …). These are hard to just
+  "do" without a list, and spelling them out makes the day loggable at a glance.
+- DO NOT enrich a simple single-activity day — an easy run, a long run, a swim, a
+  bike, a soccer match, or a rest day. The focus + target ("30 min easy run",
+  "8 mi long run") already say everything; a movement list would add noise.
+- When in doubt, leave it out. Over-specifying every day is worse than enriching
+  only the ones that need it.
+
+For each exercise give a name (as it'd appear in a catalog, well-known movements
+preferred) and a target that is sets × reps or a duration (e.g. "4x8", "3x12 each
+leg", "3x30s hold"), plus an optional one-line cue. Base rep ranges and exercise
+selection on the day's focus, the athlete's history, and their constraints
+(injuries, equipment). Tailor volume to their per-session time budget.
+
+Crucial limits:
+- Do NOT pin exact weights or paces. Intensity cues like "RPE 7", "moderate", or
+  "challenging last set" are fine; "squat 185 lb" is not — loads are chosen on
+  the day from recent logs.
+- Return ONLY the days you chose to enrich, each by its week number and weekday.
+  Omit every other day. Returning an empty list is valid if nothing needs detail.
+- Keep each movement consistent with the day's focus and the athlete's limits.
+`.trim();
+
+/**
+ * Build the enrichment request: the just-generated skeleton (so the model can
+ * see every day's focus/target and pick which to detail), plus the same athlete
+ * context and the loggable exercise catalog (prefer names already in it).
+ */
+export function buildPlanEnrichmentRequest(input: {
+  planJson: string; // JSON.stringify(the generated skeleton)
+  profileSummary: string;
+  recentDetail: string; // last ~10 days, per-workout detail + notes
+  exerciseCatalog: string; // the loggable catalog, grouped by type
+}): string {
+  return `
+Here is the training-plan skeleton you just designed (JSON). Each day has a
+focus and a high-level target:
+
+${input.planJson}
+
+What the athlete's profile says about them (respect injuries, equipment, and
+preferences when choosing movements):
+${input.profileSummary}
+
+Recent detailed workouts (use these to pick realistic movements and rep ranges,
+and to avoid aggravating anything mentioned in the notes):
+${input.recentDetail}
+
+${input.exerciseCatalog}
+When a movement you want is already in this catalog, use its exact name. It's
+fine to name a standard movement that isn't listed yet.
+
+Now go through the plan and add concrete exercises to the days that warrant them
+(gym/strength days, circuits, rehab/mobility sessions). Leave simple
+single-activity days (easy runs, long runs, swims, soccer, rest) high-level —
+return only the days you chose to enrich.
+`.trim();
+}

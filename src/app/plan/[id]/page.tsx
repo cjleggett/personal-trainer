@@ -154,6 +154,31 @@ export default async function PlanDetailPage({
                         {formatDate(date)} · {day.focus}
                       </p>
                       <p className="text-sm text-zinc-500">{day.target}</p>
+                      {day.exercises.length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {day.exercises.map((ex, exIdx) => (
+                            <li
+                              key={exIdx}
+                              className="flex justify-between gap-3 text-sm text-zinc-500"
+                            >
+                              <span>
+                                {ex.name}
+                                {ex.notes ? (
+                                  <span className="text-zinc-400">
+                                    {" "}
+                                    — {ex.notes}
+                                  </span>
+                                ) : null}
+                              </span>
+                              {ex.target && (
+                                <span className="shrink-0 text-zinc-400">
+                                  {ex.target}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </li>
                 );

@@ -7,19 +7,27 @@ import { createClient } from "@/lib/supabase/server";
 import {
   intakeTurnSchema,
   trainingPlanSchema,
+  planEnrichmentSchema,
   type IntakeTurn,
   type GoalProfile,
+  type TrainingPlan,
 } from "@/lib/ai/schemas";
 import { generateValidated } from "@/lib/ai/generate";
 import {
   intakeSystemPrompt,
   buildIntakeOpener,
 } from "@/lib/ai/prompts/intake";
-import { PLAN_SYSTEM_PROMPT, buildPlanRequest } from "@/lib/ai/prompts/plan";
+import {
+  PLAN_SYSTEM_PROMPT,
+  buildPlanRequest,
+  PLAN_ENRICHMENT_SYSTEM_PROMPT,
+  buildPlanEnrichmentRequest,
+} from "@/lib/ai/prompts/plan";
 import {
   profileSummary,
   historySummary,
   recentDetailedWorkouts,
+  exerciseCatalogSummary,
 } from "@/lib/logging/aggregates";
 import { nextMonday, weeksUntil } from "@/lib/logging/plan-dates";
 
@@ -150,6 +158,56 @@ export type GeneratePlanResult =
   | { ok: false; error: string };
 
 /**
+ * Second pass: ask the model to add concrete exercises to the detail-worthy days
+ * of a freshly generated skeleton (gym/strength days, circuits), leaving simple
+ * days high-level. Returns a NEW plan with the exercise lists merged in by
+ * (weekNumber, dayOfWeek). Best-effort: on any failure or timeout we return the
+ * skeleton unchanged, so a flaky enrichment never blocks saving the plan.
+ */
+async function enrichPlan(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  nowIso: string,
+  plan: TrainingPlan,
+): Promise<TrainingPlan> {
+  const [profile, recentDetail, catalog] = await Promise.all([
+    profileSummary(supabase, userId),
+    recentDetailedWorkouts(supabase, userId, nowIso, 10),
+    exerciseCatalogSummary(supabase),
+  ]);
+
+  const enriched = await generateValidated({
+    feature: "plan-enrich",
+    schema: planEnrichmentSchema,
+    system: PLAN_ENRICHMENT_SYSTEM_PROMPT,
+    prompt: buildPlanEnrichmentRequest({
+      planJson: JSON.stringify(plan, null, 2),
+      profileSummary: profile,
+      recentDetail,
+      exerciseCatalog: catalog,
+    }),
+  });
+  if (!enriched.ok || enriched.object.days.length === 0) return plan;
+
+  // Index the enrichments by "week|weekday" so we can attach each to its day.
+  const bySlot = new Map(
+    enriched.object.days.map((d) => [`${d.weekNumber}|${d.dayOfWeek}`, d.exercises]),
+  );
+
+  return {
+    ...plan,
+    weeks: plan.weeks.map((week) => ({
+      ...week,
+      days: week.days.map((day) => {
+        const exercises = bySlot.get(`${week.weekNumber}|${day.dayOfWeek}`);
+        // Only attach to a real session; never put a movement list on a rest day.
+        return exercises && !day.isRestDay ? { ...day, exercises } : day;
+      }),
+    })),
+  };
+}
+
+/**
  * Generate a dated, periodized plan from a finalized goal profile and save it.
  * The model produces a weekday-labeled skeleton; we own the calendar math
  * (start Monday + week count) so dates are always correct. Concrete workouts are
@@ -200,7 +258,11 @@ export async function generatePlan(
     }),
   });
   if (!generated.ok) return generated;
-  const plan = generated.object;
+
+  // Second pass: fill concrete exercises into the days that warrant them (gym
+  // days, circuits), leaving simple days high-level. Best-effort — on failure
+  // this returns the skeleton unchanged, so it never blocks saving the plan.
+  const plan = await enrichPlan(supabase, user.id, now, generated.object);
 
   const { data: row, error } = await supabase
     .from("training_plans")

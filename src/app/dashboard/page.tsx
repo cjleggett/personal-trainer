@@ -1,10 +1,16 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signout } from "@/app/login/actions";
 import { trainingPlanSchema } from "@/lib/ai/schemas";
-import { dateForSlot, relativeDayLabel } from "@/lib/logging/plan-dates";
+import {
+  dateForSlot,
+  relativeDayLabel,
+  todayInTimeZone,
+} from "@/lib/logging/plan-dates";
 import { CoachChat } from "./CoachChat";
+import { TimezoneSync } from "./TimezoneSync";
 
 /** How many upcoming plan days to surface on the dashboard. */
 const UPCOMING_COUNT = 4;
@@ -13,6 +19,7 @@ type UpcomingDay = {
   date: string; // YYYY-MM-DD
   focus: string;
   target: string;
+  exercises: { name: string; target: string; notes: string | null }[];
   isRestDay: boolean;
   phase: string;
   label: string; // "Today", "Tomorrow", or a weekday/date
@@ -28,8 +35,8 @@ function formatDate(iso: string): string {
 
 /**
  * Flatten a validated plan into dated days, keep those on/after `today`, and
- * return the next few with a human label. The plan's `start_date` (a Monday)
- * anchors the weekday-labeled skeleton to real calendar dates.
+ * return the next few with a human label. The plan's `start_date` anchors the
+ * weekday-labeled skeleton to real calendar dates (Week 1 Day 1 = start_date).
  */
 function upcomingDays(
   plan: ReturnType<typeof trainingPlanSchema.parse>,
@@ -45,6 +52,7 @@ function upcomingDays(
         date,
         focus: day.focus,
         target: day.target,
+        exercises: day.exercises,
         isRestDay: day.isRestDay,
         phase: week.phase,
         label: relativeDayLabel(today, date) ?? formatDate(date),
@@ -65,7 +73,11 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // "Today" in the user's own timezone. The browser records its IANA zone in a
+  // `tz` cookie (see TimezoneSync); without it we fall back to the server zone
+  // (UTC on Vercel), which TimezoneSync corrects with a one-time refresh.
+  const timeZone = (await cookies()).get("tz")?.value;
+  const today = todayInTimeZone(timeZone); // YYYY-MM-DD
 
   const [{ data: profile }, { data: planRow }] = await Promise.all([
     supabase
@@ -105,6 +117,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
+      <TimezoneSync serverToday={today} />
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <form action={signout}>
@@ -142,7 +155,11 @@ export default async function DashboardPage() {
                 const logHref =
                   `/workouts/new?plan=${planRow.id}&day=${day.date}` +
                   `&focus=${encodeURIComponent(day.focus)}` +
-                  `&target=${encodeURIComponent(day.target)}`;
+                  `&target=${encodeURIComponent(day.target)}` +
+                  // A gym day's prescribed exercises seed one logging card each.
+                  (day.exercises.length > 0
+                    ? `&exercises=${encodeURIComponent(JSON.stringify(day.exercises))}`
+                    : "");
                 return (
                   <li
                     key={day.date}
@@ -165,6 +182,37 @@ export default async function DashboardPage() {
                         <p className="text-sm text-zinc-600 dark:text-zinc-400">
                           {day.target}
                         </p>
+                      )}
+                      {!day.isRestDay && day.exercises.length > 0 && (
+                        // Collapsed by default so detailed gym days stay compact.
+                        // Native <details> keeps this a server component (no JS).
+                        <details className="group mt-2">
+                          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+                            <span
+                              aria-hidden
+                              className="inline-block transition-transform group-open:rotate-90"
+                            >
+                              ▸
+                            </span>
+                            {day.exercises.length}{" "}
+                            {day.exercises.length === 1 ? "exercise" : "exercises"}
+                          </summary>
+                          <ul className="mt-1 space-y-0.5">
+                            {day.exercises.map((ex, i) => (
+                              <li
+                                key={i}
+                                className="flex justify-between gap-3 text-sm text-zinc-600 dark:text-zinc-400"
+                              >
+                                <span className="truncate">{ex.name}</span>
+                                {ex.target && (
+                                  <span className="shrink-0 text-zinc-400">
+                                    {ex.target}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
                       )}
                       <p className="mt-2 text-xs text-zinc-400">{day.phase}</p>
                     </div>

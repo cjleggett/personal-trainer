@@ -9,12 +9,14 @@ import {
   trainingPlanSchema,
   type CoachTurn,
 } from "@/lib/ai/schemas";
-import { generateValidated } from "@/lib/ai/generate";
+import { generateValidatedWithTools } from "@/lib/ai/generate";
+import { buildCoachTools } from "@/lib/ai/coach-tools";
 import { COACH_SYSTEM_PROMPT, buildCoachContext } from "@/lib/ai/prompts/coach";
 import {
   profileSummary,
   historySummary,
   recentDetailedWorkouts,
+  exerciseCatalogSummary,
 } from "@/lib/logging/aggregates";
 import { weekDateRanges } from "@/lib/logging/plan-dates";
 
@@ -53,11 +55,13 @@ async function runCoachTurn(
   planId: string | null,
   messages: ModelMessage[],
 ): Promise<CoachResult> {
-  const result = await generateValidated({
+  const result = await generateValidatedWithTools({
     feature: "coach",
     schema: coachTurnSchema,
     system: COACH_SYSTEM_PROMPT,
     messages,
+    // Read-only query tools scoped to THIS user; the model can't widen the scope.
+    tools: buildCoachTools(supabase, userId),
   });
   if (!result.ok) return result;
   const turn: CoachTurn = result.object;
@@ -73,14 +77,26 @@ async function runCoachTurn(
     revalidatePath("/about");
   }
 
-  // If the plan changed, save it. start_date is untouched, so dates stay anchored.
+  // If the plan changed, save it. By default start_date is untouched so dates
+  // stay anchored; the coach may re-anchor it via newStartDate (e.g. "start a
+  // week earlier"), which shifts every plan day by the same offset.
   if (turn.kind === "updatePlan") {
     if (!planId) {
       return { ok: false, error: "There's no active plan to update." };
     }
+    const update: {
+      plan: typeof turn.plan;
+      name: string;
+      start_date?: string;
+    } = { plan: turn.plan, name: turn.plan.name };
+    // Only accept a well-formed YYYY-MM-DD; ignore anything malformed rather
+    // than corrupting the anchor the whole plan's dates hang off.
+    if (turn.newStartDate && /^\d{4}-\d{2}-\d{2}$/.test(turn.newStartDate)) {
+      update.start_date = turn.newStartDate;
+    }
     const { error } = await supabase
       .from("training_plans")
-      .update({ plan: turn.plan, name: turn.plan.name })
+      .update(update)
       .eq("id", planId); // RLS scopes to the owner
     if (error) {
       return { ok: false, error: `Couldn't save the change: ${error.message}` };
@@ -111,11 +127,12 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
 
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
-  const [row, profile, history, recentDetail] = await Promise.all([
+  const [row, profile, history, recentDetail, catalog] = await Promise.all([
     loadActivePlan(supabase),
     profileSummary(supabase, user.id),
     historySummary(supabase, user.id, now),
     recentDetailedWorkouts(supabase, user.id, now, 10),
+    exerciseCatalogSummary(supabase),
   ]);
 
   let planJson: string | null = null;
@@ -137,6 +154,7 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
     profileSummary: profile,
     historySummary: history,
     recentDetail,
+    exerciseCatalog: catalog,
     firstMessage,
   });
 

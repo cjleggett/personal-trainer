@@ -7,13 +7,44 @@ import {
   type PrefillWorkout,
 } from "../WorkoutForm";
 import { inferWorkoutType } from "@/lib/logging/metrics";
+import { listShoesWithMileage } from "@/lib/logging/shoes";
+
+/**
+ * Decode the coach's `exercises` param (a JSON array of {name, target, notes})
+ * into the prefill's exercise list. Best-effort: malformed JSON or non-string
+ * fields are dropped rather than crashing the page.
+ */
+function parseExercisesParam(
+  raw: string,
+): PrefillWorkout["exercises"] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const exercises = parsed
+      .filter(
+        (e): e is { name: string; target?: unknown; notes?: unknown } =>
+          !!e && typeof e === "object" && typeof e.name === "string",
+      )
+      .map((e) => ({
+        name: e.name,
+        target: typeof e.target === "string" ? e.target : undefined,
+        notes: typeof e.notes === "string" ? e.notes : undefined,
+      }));
+    return exercises.length ? exercises : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Build a create-mode prefill from query params. Two callers:
  *   - A training-plan day (`?plan=…&day=…&focus=…&target=…`): carries the plan
  *     link (planId + planDayDate) so the dashboard checks the day off once logged.
- *   - The dashboard coach's drafted workout (`?type=…&focus=…&target=…&note=…`):
- *     no plan link, but an explicit `type` and an optional prefilled `note`.
+ *   - The dashboard coach's drafted workout (`?type=…&focus=…&target=…&note=…`
+ *     plus an optional `exercises` JSON array): no plan link, but an explicit
+ *     `type`, an optional prefilled `note`, and — for a gym day — the specific
+ *     exercises to seed as cards.
  * Absent any usable param, it's just a blank new-workout form.
  */
 function prefillFromParams(
@@ -27,26 +58,25 @@ function prefillFromParams(
   const focus = str(params.focus);
   const target = str(params.target);
   const explicitType = str(params.type);
-  const note = str(params.note);
+  const exercises = parseExercisesParam(str(params.exercises));
 
-  // Nothing to prefill unless we have a plan link or at least a type/focus.
+  // Nothing to prefill unless we have a plan link or at least a type/focus/list.
   const fromPlan = !!planId && !!planDayDate;
-  if (!fromPlan && !explicitType && !focus) return undefined;
+  if (!fromPlan && !explicitType && !focus && !exercises) return undefined;
 
   // Type: explicit wins; else infer from the focus text.
   const workoutType =
     explicitType || (focus ? inferWorkoutType(focus) ?? undefined : undefined);
 
-  // Notes: an explicit note (coach draft) wins; else echo the plan target.
-  const notes = note || (fromPlan && target ? `Plan target: ${target}` : undefined);
-
+  // Note: we deliberately don't seed the notes field — it's the user's space for
+  // how the session felt. Any coach/plan target seeds the sets, not the notes.
   return {
     planId,
     planDayDate,
     workoutType,
     title: focus || undefined,
     target: target || undefined,
-    notes,
+    exercises,
   };
 }
 
@@ -61,11 +91,12 @@ export default async function NewWorkoutPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: exercises }, params] = await Promise.all([
+  const [{ data: exercises }, shoes, params] = await Promise.all([
     supabase
       .from("exercises")
       .select("id, name, muscle_group, measurement_type")
       .order("name"),
+    listShoesWithMileage(supabase, user.id),
     searchParams,
   ]);
 
@@ -83,6 +114,7 @@ export default async function NewWorkoutPage({
       </header>
       <WorkoutForm
         catalog={(exercises as CatalogExercise[]) ?? []}
+        shoes={shoes}
         prefill={prefill}
       />
     </main>

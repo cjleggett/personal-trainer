@@ -27,6 +27,37 @@ function cutoff(now: string, days: number): string {
   return new Date(new Date(now).getTime() - days * MS_PER_DAY).toISOString();
 }
 
+/**
+ * List the exercise catalog the athlete can log, grouped by measurement type so
+ * the coach knows what already exists before recommending (and whether it needs
+ * to create a new one). The catalog is global, so no user scoping is needed.
+ */
+export async function exerciseCatalogSummary(supabase: Client): Promise<string> {
+  const { data } = await supabase
+    .from("exercises")
+    .select("name, measurement_type")
+    .order("name", { ascending: true });
+
+  if (!data || data.length === 0) return "The exercise catalog is empty.";
+
+  const labels: Record<string, string> = {
+    weight_reps: "Weight + reps",
+    reps_only: "Reps only",
+    distance_time: "Distance + time",
+    time_only: "Timed",
+  };
+  const byType = new Map<string, string[]>();
+  for (const e of data) {
+    const list = byType.get(e.measurement_type) ?? [];
+    list.push(e.name);
+    byType.set(e.measurement_type, list);
+  }
+  const lines = [...byType.entries()].map(
+    ([type, names]) => `- ${labels[type] ?? type}: ${names.join(", ")}`,
+  );
+  return [`Exercises already in the catalog (${data.length}):`, ...lines].join("\n");
+}
+
 /** Summarize the user's profile row into a short block, or a "no profile" note. */
 export async function profileSummary(
   supabase: Client,

@@ -34,13 +34,14 @@ export default async function WorkoutDetailPage({
   const { data: workout } = await supabase
     .from("workouts")
     .select(
-      "id, title, workout_type, notes, performed_at, exercise_instances(id, position, sets, exercises(name, measurement_type))",
+      "id, title, workout_type, notes, performed_at, shoes(name), exercise_instances(id, position, sets, exercises(name, measurement_type))",
     )
     .eq("id", id)
     .single();
 
   if (!workout) notFound();
 
+  const shoeName = (workout.shoes as { name: string } | null)?.name ?? null;
   const instances = [...workout.exercise_instances].sort(
     (a, b) => a.position - b.position,
   );
@@ -55,6 +56,7 @@ export default async function WorkoutDetailPage({
           <p className="mt-1 text-sm text-zinc-500">
             {workout.workout_type ? `${workout.workout_type} · ` : ""}
             {formatDateTime(workout.performed_at)}
+            {shoeName ? ` · 👟 ${shoeName}` : ""}
           </p>
         </div>
         <Link

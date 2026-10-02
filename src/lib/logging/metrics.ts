@@ -21,6 +21,10 @@ export type MetricField = {
   factor?: number;
   step?: number;
   optional?: boolean;
+  /** Render as two inputs — minutes + seconds — instead of one decimal field.
+   * Only valid on a duration field (unit "min", factor 60): the two inputs are
+   * combined back into display-minutes, so storage/conversion are unchanged. */
+  minSec?: boolean;
 };
 
 /**
@@ -45,12 +49,12 @@ export const METRIC_FIELDS: Record<MeasurementType, MetricField[]> = {
   ],
   distance_time: [
     { key: "distance_m", label: "Distance", unit: "mi", factor: METERS_PER_MILE, step: 0.01 },
-    { key: "duration_s", label: "Duration", unit: "min", factor: 60, step: 0.1 },
+    { key: "duration_s", label: "Duration", unit: "min", factor: 60, step: 0.1, minSec: true },
     { key: "elevation_gain_m", label: "Elevation gain", unit: "ft", factor: METERS_PER_FOOT, step: 10, optional: true },
     { key: "avg_hr", label: "Avg HR", unit: "bpm", step: 1, optional: true },
   ],
   time_only: [
-    { key: "duration_s", label: "Duration", unit: "min", factor: 60, step: 0.1 },
+    { key: "duration_s", label: "Duration", unit: "min", factor: 60, step: 0.1, minSec: true },
     { key: "distance_m", label: "Distance", unit: "ft", factor: METERS_PER_FOOT, step: 1, optional: true },
     { key: "load", label: "Load", unit: "lb", factor: KG_PER_LB, step: 2.5, optional: true },
   ],
@@ -109,6 +113,15 @@ export function autoExerciseForType(workoutType: string): string | null {
 }
 
 /**
+ * Whether a (free-text) workout type is a run — the only type that can carry a
+ * pair of shoes. Matches "Run", "run", "Running", "Jog", "Trail run", etc.
+ */
+export function isRunningType(workoutType: string): boolean {
+  const t = workoutType.trim().toLowerCase();
+  return /\b(run|running|jog|jogging)\b/.test(t);
+}
+
+/**
  * Best-effort guess a workout type from free text (e.g. a training-plan day's
  * focus like "Easy run" or "Lower-body strength"). Prefers a known preset, then
  * a single-activity keyword. Returns null when nothing matches — the user picks.
@@ -156,6 +169,15 @@ export function parseTargetToMetrics(
     metrics.reps = String(parseInt(setsReps[2], 10));
   }
 
+  // Weight, e.g. "@ 135 lb", "135lb", "60 kg" (kg converted to lb; display is lb).
+  if (fieldKeys.has("weight")) {
+    const lb = num(t.match(/(\d+(?:\.\d+)?)\s*(?:lb|lbs|pound|pounds)\b/));
+    const kg = num(t.match(/(\d+(?:\.\d+)?)\s*(?:kg|kilos?|kilograms?)\b/));
+    if (!Number.isNaN(lb)) metrics.weight = String(lb);
+    else if (!Number.isNaN(kg))
+      metrics.weight = String(Math.round((kg / KG_PER_LB) * 100) / 100);
+  }
+
   // Distance: miles, or km converted to miles (display unit is mi).
   if (fieldKeys.has("distance_m")) {
     const mi = num(t.match(/(\d+(?:\.\d+)?)\s*(?:mi|mile|miles)\b/));
@@ -165,15 +187,55 @@ export function parseTargetToMetrics(
       metrics.distance_m = String(Math.round((km / KM_PER_MILE) * 100) / 100);
   }
 
-  // Duration: hours→min, or minutes directly (display unit is min).
+  // Duration (display unit is min, so convert everything to minutes). Reads
+  // minutes and/or seconds ("90s", "2x30s", "1 min 30 s"), falling back to
+  // hours. Seconds support lets short holds like "30s plank" seed correctly.
   if (fieldKeys.has("duration_s")) {
     const hr = num(t.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/));
     const min = num(t.match(/(\d+(?:\.\d+)?)\s*(?:min|mins|minutes?)\b/));
-    if (!Number.isNaN(min)) metrics.duration_s = String(min);
-    else if (!Number.isNaN(hr)) metrics.duration_s = String(hr * 60);
+    const sec = num(t.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secs|second|seconds)\b/));
+    let minutes = NaN;
+    if (!Number.isNaN(min)) minutes = min;
+    if (!Number.isNaN(sec)) minutes = (Number.isNaN(minutes) ? 0 : minutes) + sec / 60;
+    if (Number.isNaN(minutes) && !Number.isNaN(hr)) minutes = hr * 60;
+    if (!Number.isNaN(minutes)) {
+      metrics.duration_s = String(Math.round(minutes * 1e6) / 1e6);
+    }
   }
 
   return { count, metrics };
+}
+
+// ── Minutes ↔ minutes+seconds (duration input helpers) ───────────────────────
+//
+// A duration field's canonical value is seconds, and the form carries it as a
+// DISPLAY-MINUTES string (e.g. "2.5"). For entry we split that into whole
+// minutes + seconds and recombine on change — storage and the min↔s factor are
+// untouched, so existing data needs no migration.
+
+/** Split a display-minutes string into { min, sec } strings for the two inputs.
+ * "" → both blank; "2.5" → { min: "2", sec: "30" }. Seconds are rounded to the
+ * nearest whole second. */
+export function minutesToMinSec(minutes: string): { min: string; sec: string } {
+  if (minutes.trim() === "") return { min: "", sec: "" };
+  const mins = parseFloat(minutes);
+  if (Number.isNaN(mins)) return { min: "", sec: "" };
+  const totalSec = Math.round(mins * 60);
+  const whole = Math.floor(totalSec / 60);
+  const rem = totalSec - whole * 60;
+  return { min: String(whole), sec: String(rem) };
+}
+
+/** Recombine minutes + seconds inputs into a display-minutes string (what the
+ * rest of the form expects). An empty or all-zero entry → "" so an untouched
+ * "00:00" is treated as no value on save (not a real 0-second set). */
+export function minSecToMinutes(min: string, sec: string): string {
+  const m = parseFloat(min) || 0;
+  const s = parseFloat(sec) || 0;
+  const minutes = m + s / 60;
+  if (minutes === 0) return "";
+  // Trim float noise (e.g. 2.4999999) to a clean value; stored as *60 on save.
+  return String(Math.round(minutes * 1e6) / 1e6);
 }
 
 /** Local MM/DD/YYYY (used to autofill an untitled workout, e.g. "08/13/2026 Run"). */

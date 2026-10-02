@@ -174,6 +174,30 @@ export type Database = {
         }
         Relationships: []
       }
+      shoes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          starting_distance_m: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          starting_distance_m?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          starting_distance_m?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       token_usage: {
         Row: {
           cache_read_tokens: number
@@ -261,6 +285,7 @@ export type Database = {
           performed_at: string
           plan_day_date: string | null
           plan_id: string | null
+          shoe_id: string | null
           title: string | null
           user_id: string
           workout_type: string | null
@@ -273,6 +298,7 @@ export type Database = {
           performed_at?: string
           plan_day_date?: string | null
           plan_id?: string | null
+          shoe_id?: string | null
           title?: string | null
           user_id: string
           workout_type?: string | null
@@ -285,6 +311,7 @@ export type Database = {
           performed_at?: string
           plan_day_date?: string | null
           plan_id?: string | null
+          shoe_id?: string | null
           title?: string | null
           user_id?: string
           workout_type?: string | null
@@ -296,6 +323,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "training_plans"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workouts_shoe_fkey"
+            columns: ["shoe_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "shoes"
+            referencedColumns: ["id", "user_id"]
           },
         ]
       }

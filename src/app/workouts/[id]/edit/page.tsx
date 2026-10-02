@@ -12,6 +12,7 @@ import {
   type CatalogExercise,
   type InitialWorkout,
 } from "../../WorkoutForm";
+import { listShoesWithMileage } from "@/lib/logging/shoes";
 
 /** Stored canonical value → display-unit string, inverting the save factor. */
 function toDisplay(mt: MeasurementType, set: StoredSet): Record<string, string> {
@@ -45,11 +46,11 @@ export default async function EditWorkoutPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: workout }, { data: exercises }] = await Promise.all([
+  const [{ data: workout }, { data: exercises }, shoes] = await Promise.all([
     supabase
       .from("workouts")
       .select(
-        "id, title, workout_type, notes, performed_at, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
+        "id, title, workout_type, notes, performed_at, shoe_id, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
       )
       .eq("id", id)
       .single(),
@@ -57,6 +58,7 @@ export default async function EditWorkoutPage({
       .from("exercises")
       .select("id, name, muscle_group, measurement_type")
       .order("name"),
+    listShoesWithMileage(supabase, user.id),
   ]);
 
   if (!workout) notFound();
@@ -67,6 +69,7 @@ export default async function EditWorkoutPage({
     workoutType: workout.workout_type ?? "",
     notes: workout.notes ?? "",
     performedOn: toDateInput(workout.performed_at),
+    shoeId: workout.shoe_id ?? null,
     instances: [...workout.exercise_instances]
       .sort((a, b) => a.position - b.position)
       .map((inst) => {
@@ -95,6 +98,7 @@ export default async function EditWorkoutPage({
       </header>
       <WorkoutForm
         catalog={(exercises as CatalogExercise[]) ?? []}
+        shoes={shoes}
         initial={initial}
       />
     </main>

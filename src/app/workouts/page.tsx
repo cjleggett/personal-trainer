@@ -43,6 +43,9 @@ export default async function WorkoutsPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4 sm:p-6">
+      <Link href="/dashboard" className="text-sm text-zinc-500 hover:underline">
+        ← Back to dashboard
+      </Link>
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Workout history</h1>
         <Link
@@ -85,10 +88,6 @@ export default async function WorkoutsPage() {
           ))}
         </ul>
       )}
-
-      <Link href="/dashboard" className="text-sm text-zinc-500 hover:underline">
-        ← Back to dashboard
-      </Link>
     </main>
   );
 }
