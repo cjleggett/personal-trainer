@@ -21,7 +21,8 @@ export async function login(_prevState: unknown, formData: FormData) {
   });
 
   if (error) {
-    return { error: error.message };
+    // Echo the email back so the field survives the failed submit.
+    return { error: error.message, email };
   }
 
   revalidatePath("/", "layout");
@@ -45,12 +46,19 @@ async function needsOnboarding(userId?: string): Promise<boolean> {
 export async function signup(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirm_password") ?? "");
+
+  // Validate server-side — never trust the client to have matched them.
+  if (password !== confirmPassword) {
+    return { error: "Passwords do not match.", email };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({ email, password });
 
   if (error) {
-    return { error: error.message };
+    // Echo the email back so the field survives the failed submit.
+    return { error: error.message, email };
   }
 
   // With email confirmation off (the current config), signUp returns an active
