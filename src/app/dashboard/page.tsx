@@ -324,6 +324,9 @@ export default async function DashboardPage() {
                     : day.isRestDay
                       ? "bg-faint"
                       : "bg-rust";
+                  // Today is the central focus: enlarge its dot with a rust ring
+                  // and accent the "Today" label, so it anchors the timeline.
+                  const isToday = day.date === today;
                   return (
                     <li
                       key={day.date}
@@ -333,10 +336,18 @@ export default async function DashboardPage() {
                     >
                       <span
                         aria-hidden
-                        className={`absolute -left-[1.9rem] top-6 size-[11px] rounded-full border-2 border-paper ${dot}`}
+                        className={`absolute -left-[1.9rem] top-6 rounded-full border-2 border-paper ${dot} ${
+                          isToday
+                            ? "size-[15px] ring-2 ring-rust ring-offset-2 ring-offset-paper"
+                            : "size-[11px]"
+                        }`}
                       />
                       <div className="min-w-0">
-                        <p className="font-serif text-sm font-semibold">
+                        <p
+                          className={`font-serif text-sm font-semibold ${
+                            isToday ? "text-rust" : ""
+                          }`}
+                        >
                           {day.label}
                         </p>
                         <p className="mt-0.5 font-medium">
