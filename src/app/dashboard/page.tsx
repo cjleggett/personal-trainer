@@ -324,9 +324,12 @@ export default async function DashboardPage() {
                     : day.isRestDay
                       ? "bg-faint"
                       : "bg-rust";
-                  // Today is the central focus: enlarge its dot with a rust ring
-                  // and accent the "Today" label, so it anchors the timeline.
+                  // Today is the central focus: enlarge its dot with a ring and
+                  // accent the "Today" label, so it anchors the timeline. The
+                  // ring tracks the dot's state (green once logged) so a done
+                  // day reads as fully green, not green-with-an-orange-ring.
                   const isToday = day.date === today;
+                  const todayRing = done ? "ring-good" : "ring-rust";
                   return (
                     <li
                       key={day.date}
@@ -338,7 +341,7 @@ export default async function DashboardPage() {
                         aria-hidden
                         className={`absolute -left-[1.9rem] top-6 rounded-full border-2 border-paper ${dot} ${
                           isToday
-                            ? "size-[15px] ring-2 ring-rust ring-offset-2 ring-offset-paper"
+                            ? `size-[15px] ring-2 ${todayRing} ring-offset-2 ring-offset-paper`
                             : "size-[11px]"
                         }`}
                       />
