@@ -17,6 +17,10 @@ import { TimezoneSync } from "./TimezoneSync";
 /** How many upcoming plan days to surface on the dashboard. */
 const UPCOMING_COUNT = 4;
 
+/** How many recently-passed plan days to also surface, so a user can log a
+ * workout from the night before that they didn't get to until the morning. */
+const RECENT_PAST_COUNT = 2;
+
 /** A plan goes "stale" once it's gone this long without being changed or
  * reviewed; past this we nudge the athlete to re-evaluate it. */
 const REEVALUATE_AFTER_DAYS = 7;
@@ -80,20 +84,23 @@ function formatDate(iso: string): string {
 }
 
 /**
- * Flatten a validated plan into dated days, keep those on/after `today`, and
- * return the next few with a human label. The plan's `start_date` anchors the
- * weekday-labeled skeleton to real calendar dates (Week 1 Day 1 = start_date).
+ * Flatten a validated plan into dated days within a window around `today` —
+ * the last couple of days (so a late-logged workout from the night before is
+ * reachable) through the next few — each with a human label. The plan's
+ * `start_date` anchors the weekday-labeled skeleton to real calendar dates
+ * (Week 1 Day 1 = start_date).
  */
 function upcomingDays(
   plan: ReturnType<typeof trainingPlanSchema.parse>,
   startDate: string,
   today: string,
 ): UpcomingDay[] {
+  const windowStart = addDays(today, -RECENT_PAST_COUNT);
   const days: UpcomingDay[] = [];
   for (const week of plan.weeks) {
     week.days.forEach((day, dayIdx) => {
       const date = dateForSlot(startDate, week.weekNumber, dayIdx);
-      if (date < today) return;
+      if (date < windowStart) return;
       days.push({
         date,
         focus: day.focus,
@@ -105,7 +112,12 @@ function upcomingDays(
       });
     });
   }
-  return days.sort((a, b) => a.date.localeCompare(b.date)).slice(0, UPCOMING_COUNT);
+  days.sort((a, b) => a.date.localeCompare(b.date));
+  // Keep the recent past days plus the upcoming ones; the past window is
+  // bounded by `windowStart` above, so cap only the upcoming tail here.
+  const firstUpcoming = days.findIndex((d) => d.date >= today);
+  const start = firstUpcoming === -1 ? days.length : firstUpcoming;
+  return days.slice(0, start + UPCOMING_COUNT);
 }
 
 export default async function DashboardPage() {
