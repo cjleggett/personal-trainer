@@ -19,6 +19,14 @@ function formatDateTime(iso: string): string {
   });
 }
 
+/** A YYYY-MM-DD plan day as a short, TZ-stable label (e.g. "Oct 6"). */
+function formatPlanDay(iso: string): string {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default async function WorkoutDetailPage({
   params,
 }: {
@@ -35,12 +43,18 @@ export default async function WorkoutDetailPage({
   const { data: workout } = await supabase
     .from("workouts")
     .select(
-      "id, title, notes, performed_at, workout_types(name, emoji), shoes(name), exercise_instances(id, position, sets, exercises(name, measurement_type))",
+      "id, title, notes, performed_at, plan_id, plan_day_date, workout_types(name, emoji), shoes(name), training_plans(name), exercise_instances(id, position, sets, exercises(name, measurement_type))",
     )
     .eq("id", id)
     .single();
 
   if (!workout) notFound();
+
+  const planName = (workout.training_plans as { name: string } | null)?.name;
+  const planLink =
+    workout.plan_id && workout.plan_day_date && planName
+      ? { planId: workout.plan_id, name: planName, day: workout.plan_day_date }
+      : null;
 
   const type = workout.workout_types as { name: string; emoji: string } | null;
   const shoeName = (workout.shoes as { name: string } | null)?.name ?? null;
@@ -66,6 +80,18 @@ export default async function WorkoutDetailPage({
               {formatDateTime(workout.performed_at)}
               {shoeName ? ` · 👟 ${shoeName}` : ""}
             </p>
+            {planLink && (
+              <p className="mt-1 text-sm text-muted">
+                📋 Fulfills the{" "}
+                <Link
+                  href={`/plan/${planLink.planId}`}
+                  className="text-rust hover:underline"
+                >
+                  {formatPlanDay(planLink.day)} {planLink.name}
+                </Link>{" "}
+                plan day
+              </p>
+            )}
           </div>
           <Link
             href={`/workouts/${workout.id}/edit`}
