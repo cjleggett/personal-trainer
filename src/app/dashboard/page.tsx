@@ -298,7 +298,7 @@ export default async function DashboardPage() {
         {parsed?.success && planRow && (
           <section className="flex flex-col gap-4">
             <h2 className="flex items-baseline gap-3 font-serif text-2xl font-semibold">
-              The week ahead
+              Workouts
               <Link
                 href={`/plan/${planRow.id}`}
                 className="text-sm font-normal text-faint hover:text-ink hover:underline"
