@@ -31,9 +31,15 @@ export type SavePayload = {
   notes?: string;
   /** ISO date (YYYY-MM-DD) of when the workout happened. Defaults to today. */
   performedOn?: string;
-  /** When logged from a training plan, the plan and the dated day it fulfills. */
-  planId?: string;
-  planDayDate?: string; // YYYY-MM-DD
+  /**
+   * The training-plan day this workout fulfills, if any. Both must be set to
+   * link; both null/absent means no link (or clear an existing one on update).
+   * The link is intentionally independent of `performedOn` — a workout can be
+   * logged on a different day than the plan day it satisfies (e.g. a vague
+   * "cross-training" day fulfilled by a specific "rollerblading" session).
+   */
+  planId?: string | null;
+  planDayDate?: string | null; // YYYY-MM-DD
   /**
    * Optional running shoes (running workouts only). Either an existing shoe's id
    * (`shoeId`), or a new shoe to create by name with an optional starting
@@ -79,6 +85,23 @@ function buildWorkoutFields(payload: SavePayload) {
     ? new Date(`${payload.performedOn}T12:00:00`).toISOString()
     : undefined; // let the DB default (now()) apply on create
   return { workoutTypeId, title, performedAt };
+}
+
+/**
+ * Normalize the optional plan link into the two columns stored on a workout. A
+ * link requires BOTH ids; anything else resolves to no link (null/null), so an
+ * update can clear a link by sending neither. Returns null columns rather than
+ * omitting them, so update overwrites a stale link instead of leaving it.
+ */
+function planLinkFields(payload: SavePayload): {
+  plan_id: string | null;
+  plan_day_date: string | null;
+} {
+  const linked = !!payload.planId && !!payload.planDayDate;
+  return {
+    plan_id: linked ? payload.planId! : null,
+    plan_day_date: linked ? payload.planDayDate! : null,
+  };
 }
 
 /** Expand set-groups into flat canonical set objects for one instance row. */
@@ -161,8 +184,7 @@ export async function createWorkout(payload: SavePayload) {
       notes: payload.notes?.trim() || null,
       shoe_id: shoe.shoeId,
       ...(performedAt ? { performed_at: performedAt } : {}),
-      ...(payload.planId ? { plan_id: payload.planId } : {}),
-      ...(payload.planDayDate ? { plan_day_date: payload.planDayDate } : {}),
+      ...planLinkFields(payload),
     })
     .select("id")
     .single();
@@ -208,6 +230,7 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
       notes: payload.notes?.trim() || null,
       shoe_id: shoe.shoeId, // null clears a previously-attached pair
       ...(performedAt ? { performed_at: performedAt } : {}),
+      ...planLinkFields(payload), // null columns clear a previously-linked plan day
     })
     .eq("id", workoutId); // RLS ensures only the owner's row matches
   if (wErr) return { error: wErr.message };
@@ -227,6 +250,7 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
 
   revalidatePath("/workouts");
   revalidatePath(`/workouts/${workoutId}`);
+  revalidatePath("/dashboard"); // a changed/cleared plan link affects "Logged" status
   redirect(`/workouts/${workoutId}`);
 }
 

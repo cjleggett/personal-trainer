@@ -7,8 +7,9 @@ import {
   type CatalogExercise,
   type PrefillWorkout,
 } from "../WorkoutForm";
-import { inferWorkoutType } from "@/lib/logging/metrics";
+import { matchWorkoutTypeName } from "@/lib/logging/metrics";
 import { listShoesWithMileage } from "@/lib/logging/shoes";
+import { loadLinkablePlan } from "@/lib/logging/plans";
 
 /**
  * Decode the coach's `exercises` param (a JSON array of {name, target, notes})
@@ -50,6 +51,7 @@ function parseExercisesParam(
  */
 function prefillFromParams(
   params: Record<string, string | string[] | undefined>,
+  typeNames: string[],
 ): PrefillWorkout | undefined {
   const str = (v: string | string[] | undefined) =>
     typeof v === "string" ? v : "";
@@ -65,9 +67,12 @@ function prefillFromParams(
   const fromPlan = !!planId && !!planDayDate;
   if (!fromPlan && !explicitType && !focus && !exercises) return undefined;
 
-  // Type: explicit wins; else infer from the focus text.
+  // Type: explicit wins; else match the focus text to an existing catalog type
+  // (so the form can preselect it). Pass the real catalog names so the match
+  // lands on "Running"/"Cycling" rather than labels the catalog doesn't have.
   const workoutType =
-    explicitType || (focus ? inferWorkoutType(focus) ?? undefined : undefined);
+    explicitType ||
+    (focus ? matchWorkoutTypeName(focus, typeNames) ?? undefined : undefined);
 
   // Note: we deliberately don't seed the notes field — it's the user's space for
   // how the session felt. Any coach/plan target seeds the sets, not the notes.
@@ -103,7 +108,15 @@ export default async function NewWorkoutPage({
       searchParams,
     ]);
 
-  const prefill = prefillFromParams(params);
+  const prefill = prefillFromParams(
+    params,
+    (workoutTypes ?? []).map((t) => t.name),
+  );
+
+  // Offer a plan to link against: the one named in the prefill (logging a
+  // specific plan day) if present, else the user's active plan. Lets the user
+  // link/relink from the form even for an otherwise ad-hoc entry.
+  const plan = await loadLinkablePlan(supabase, prefill?.planId);
 
   return (
     <>
@@ -128,6 +141,7 @@ export default async function NewWorkoutPage({
           workoutTypes={workoutTypes ?? []}
           shoes={shoes}
           prefill={prefill}
+          plan={plan}
         />
       </main>
     </>

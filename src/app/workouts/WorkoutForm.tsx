@@ -23,6 +23,8 @@ import {
 } from "./actions";
 import { Combobox } from "./Combobox";
 import { EmojiPicker } from "./EmojiPicker";
+import type { LinkablePlan } from "@/lib/logging/plans";
+import { relativeDayLabel } from "@/lib/logging/plan-dates";
 
 export type CatalogExercise = {
   id: string;
@@ -48,6 +50,8 @@ export type InitialWorkout = {
   notes: string;
   performedOn: string; // YYYY-MM-DD
   shoeId: string | null; // currently-attached pair, if any
+  /** The plan day this workout is currently linked to, if any. */
+  planDayDate: string | null; // YYYY-MM-DD
   instances: {
     exerciseId: string;
     groups: { count: string; metrics: Record<string, string> }[];
@@ -93,18 +97,31 @@ function todayIso(): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+/** A YYYY-MM-DD as a short, TZ-stable calendar label (e.g. "Tue, Oct 6"). */
+function formatDate(iso: string): string {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function WorkoutForm({
   catalog,
   workoutTypes,
   shoes = [],
   initial,
   prefill,
+  plan,
 }: {
   catalog: CatalogExercise[];
   workoutTypes: WorkoutTypeOption[];
   shoes?: ShoeOption[];
   initial?: InitialWorkout;
   prefill?: PrefillWorkout;
+  /** The training plan this workout can link to (active plan for a new workout,
+   * or the linked plan when editing). Enables the link-to-plan-day control. */
+  plan?: LinkablePlan | null;
 }) {
   const router = useRouter();
   const editing = !!initial;
@@ -132,9 +149,22 @@ export function WorkoutForm({
   // from a prefill (coach draft / plan target) — only an existing workout's own
   // notes populate it, when editing.
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const [performedOn, setPerformedOn] = useState(
-    initial?.performedOn ?? todayIso(),
+  // The plan day this workout is linked to ("" = unlinked). Seeded from an
+  // existing link (edit) or the plan day being logged (prefill). Independent of
+  // the performed date so a vague plan day can be fulfilled by any session.
+  const [planDayDate, setPlanDayDate] = useState<string>(
+    initial?.planDayDate ?? prefill?.planDayDate ?? "",
   );
+  // Date the workout was performed. Logging a planned day defaults to that day's
+  // date (so back-filling a past planned session is one tap), but never past
+  // today — logging a future day still records it as done today. Stays freely
+  // editable; the link above is what ties it to the plan, not this date.
+  const [performedOn, setPerformedOn] = useState(() => {
+    if (initial) return initial.performedOn;
+    const planned = prefill?.planDayDate;
+    const today = todayIso();
+    return planned && planned <= today ? planned : today;
+  });
 
   // Shoes (running workouts only). `shoeId` is the chosen existing pair ("" =
   // none). When adding a new pair, `shoeId` is "__new__" and the name/starting
@@ -224,6 +254,26 @@ export function WorkoutForm({
   const autoTitle = [todayTitlePrefix(), workoutTypeName]
     .filter(Boolean)
     .join(" ");
+
+  // ── Plan-day link ──────────────────────────────────────────────────────
+  // The non-rest days of the linkable plan, as picker options. Rest days aren't
+  // offered — you don't log a workout against a rest day.
+  const planDayOptions = (plan?.days ?? [])
+    .filter((d) => !d.isRestDay)
+    .map((d) => {
+      const rel = relativeDayLabel(todayIso(), d.date);
+      const when = rel ?? formatDate(d.date);
+      return {
+        value: d.date,
+        label: `${when} — ${d.focus}`,
+        hint: d.target || undefined,
+      };
+    });
+  const linkedDay = plan?.days.find((d) => d.date === planDayDate) ?? null;
+  // Warn when the day you performed the workout differs from the plan day it's
+  // linked to. Legitimate (back-filling, a vague plan day), so it's a nudge, not
+  // a block — it just surfaces the kind of split that hid a workout from history.
+  const dateMismatch = !!linkedDay && !!performedOn && performedOn !== planDayDate;
 
   function makeInstance(exercise: CatalogExercise, autoAdded: boolean): DraftInstance {
     return { uid: nextUid(), exercise, groups: [newGroup()], showOptional: false, autoAdded };
@@ -329,8 +379,9 @@ export function WorkoutForm({
       workoutTypeName: workoutTypeName || undefined,
       notes: notes || undefined,
       performedOn,
-      planId: prefill?.planId,
-      planDayDate: prefill?.planDayDate,
+      // Link only when a plan day is chosen; otherwise clear it (both null).
+      planId: planDayDate ? plan?.id ?? null : null,
+      planDayDate: planDayDate || null,
       shoeId: existing,
       shoeName: newName || undefined,
       shoeStartingMi:
@@ -456,6 +507,59 @@ export function WorkoutForm({
           />
         </label>
       </div>
+
+      {/* Plan-day link: ties this workout to a planned day (so the dashboard
+          checks it off), independent of the performed date above. Shown only
+          when there's a plan to link to. */}
+      {plan && (
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">Plan day (optional)</span>
+          {linkedDay ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-line-strong bg-surface px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-base text-ink">
+                  {relativeDayLabel(todayIso(), linkedDay.date) ??
+                    formatDate(linkedDay.date)}{" "}
+                  — {linkedDay.focus}
+                </p>
+                <p className="truncate text-xs text-faint">
+                  {plan.name}
+                  {linkedDay.target ? ` · ${linkedDay.target}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlanDayDate("")}
+                className="shrink-0 text-sm text-muted hover:text-rust"
+              >
+                Unlink
+              </button>
+            </div>
+          ) : (
+            <>
+              <Combobox
+                options={planDayOptions}
+                placeholder={`Link to a day in ${plan.name}…`}
+                resetOnSelect
+                onSelect={(date) => setPlanDayDate(date)}
+              />
+              <p className="text-xs text-faint">
+                Link this session to a planned day to check it off — handy when a
+                vague day (e.g. cross-training) is met by a specific workout.
+              </p>
+            </>
+          )}
+          {dateMismatch && (
+            <p className="rounded-xl border border-rust/30 bg-rust-soft px-3 py-2 text-sm text-ink">
+              Heads up: this is dated{" "}
+              <strong>{formatDate(performedOn)}</strong> but linked to the{" "}
+              <strong>{formatDate(planDayDate)}</strong> plan day. That&apos;s
+              fine for a back-filled or stand-in session — just confirming it&apos;s
+              intentional.
+            </p>
+          )}
+        </div>
+      )}
 
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Title (optional)</span>

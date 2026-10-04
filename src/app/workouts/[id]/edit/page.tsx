@@ -14,6 +14,7 @@ import {
   type InitialWorkout,
 } from "../../WorkoutForm";
 import { listShoesWithMileage } from "@/lib/logging/shoes";
+import { loadLinkablePlan } from "@/lib/logging/plans";
 
 /** Stored canonical value → display-unit string, inverting the save factor. */
 function toDisplay(mt: MeasurementType, set: StoredSet): Record<string, string> {
@@ -52,7 +53,7 @@ export default async function EditWorkoutPage({
       supabase
         .from("workouts")
         .select(
-          "id, title, workout_type_id, notes, performed_at, shoe_id, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
+          "id, title, workout_type_id, notes, performed_at, shoe_id, plan_id, plan_day_date, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
         )
         .eq("id", id)
         .single(),
@@ -66,6 +67,11 @@ export default async function EditWorkoutPage({
 
   if (!workout) notFound();
 
+  // Offer the plan to link against: the workout's linked plan if it has one
+  // (even if archived), else the active plan so a prior ad-hoc entry can be
+  // linked. Runs after the workout fetch since it depends on its plan_id.
+  const plan = await loadLinkablePlan(supabase, workout.plan_id);
+
   const initial: InitialWorkout = {
     id: workout.id,
     title: workout.title ?? "",
@@ -73,6 +79,7 @@ export default async function EditWorkoutPage({
     notes: workout.notes ?? "",
     performedOn: toDateInput(workout.performed_at),
     shoeId: workout.shoe_id ?? null,
+    planDayDate: workout.plan_day_date ?? null,
     instances: [...workout.exercise_instances]
       .sort((a, b) => a.position - b.position)
       .map((inst) => {
@@ -108,6 +115,7 @@ export default async function EditWorkoutPage({
           workoutTypes={workoutTypes ?? []}
           shoes={shoes}
           initial={initial}
+          plan={plan}
         />
       </main>
     </>

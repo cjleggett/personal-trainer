@@ -81,11 +81,14 @@ export function daysBetween(today: string, iso: string): number {
 }
 
 /**
- * A human, date-relative label for `iso` given `today` — "Today", "Tomorrow",
- * or null for anything further out (callers fall back to a weekday/date).
+ * A human, date-relative label for `iso` given `today` — "Yesterday", "Today",
+ * "Tomorrow", or null for anything further out (callers fall back to a
+ * weekday/date).
  */
 export function relativeDayLabel(today: string, iso: string): string | null {
   switch (daysBetween(today, iso)) {
+    case -1:
+      return "Yesterday";
     case 0:
       return "Today";
     case 1:

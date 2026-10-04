@@ -17,6 +17,10 @@ import { TimezoneSync } from "./TimezoneSync";
 /** How many upcoming plan days to surface on the dashboard. */
 const UPCOMING_COUNT = 4;
 
+/** How many recently-passed plan days to also surface, so a user can log a
+ * workout from the night before that they didn't get to until the morning. */
+const RECENT_PAST_COUNT = 2;
+
 /** A plan goes "stale" once it's gone this long without being changed or
  * reviewed; past this we nudge the athlete to re-evaluate it. */
 const REEVALUATE_AFTER_DAYS = 7;
@@ -80,20 +84,23 @@ function formatDate(iso: string): string {
 }
 
 /**
- * Flatten a validated plan into dated days, keep those on/after `today`, and
- * return the next few with a human label. The plan's `start_date` anchors the
- * weekday-labeled skeleton to real calendar dates (Week 1 Day 1 = start_date).
+ * Flatten a validated plan into dated days within a window around `today` —
+ * the last couple of days (so a late-logged workout from the night before is
+ * reachable) through the next few — each with a human label. The plan's
+ * `start_date` anchors the weekday-labeled skeleton to real calendar dates
+ * (Week 1 Day 1 = start_date).
  */
 function upcomingDays(
   plan: ReturnType<typeof trainingPlanSchema.parse>,
   startDate: string,
   today: string,
 ): UpcomingDay[] {
+  const windowStart = addDays(today, -RECENT_PAST_COUNT);
   const days: UpcomingDay[] = [];
   for (const week of plan.weeks) {
     week.days.forEach((day, dayIdx) => {
       const date = dateForSlot(startDate, week.weekNumber, dayIdx);
-      if (date < today) return;
+      if (date < windowStart) return;
       days.push({
         date,
         focus: day.focus,
@@ -105,7 +112,12 @@ function upcomingDays(
       });
     });
   }
-  return days.sort((a, b) => a.date.localeCompare(b.date)).slice(0, UPCOMING_COUNT);
+  days.sort((a, b) => a.date.localeCompare(b.date));
+  // Keep the recent past days plus the upcoming ones; the past window is
+  // bounded by `windowStart` above, so cap only the upcoming tail here.
+  const firstUpcoming = days.findIndex((d) => d.date >= today);
+  const start = firstUpcoming === -1 ? days.length : firstUpcoming;
+  return days.slice(0, start + UPCOMING_COUNT);
 }
 
 export default async function DashboardPage() {
@@ -286,7 +298,7 @@ export default async function DashboardPage() {
         {parsed?.success && planRow && (
           <section className="flex flex-col gap-4">
             <h2 className="flex items-baseline gap-3 font-serif text-2xl font-semibold">
-              The week ahead
+              Workouts
               <Link
                 href={`/plan/${planRow.id}`}
                 className="text-sm font-normal text-faint hover:text-ink hover:underline"
@@ -312,6 +324,12 @@ export default async function DashboardPage() {
                     : day.isRestDay
                       ? "bg-faint"
                       : "bg-rust";
+                  // Today is the central focus: enlarge its dot with a ring and
+                  // accent the "Today" label, so it anchors the timeline. The
+                  // ring tracks the dot's state (green once logged) so a done
+                  // day reads as fully green, not green-with-an-orange-ring.
+                  const isToday = day.date === today;
+                  const todayRing = done ? "ring-good" : "ring-rust";
                   return (
                     <li
                       key={day.date}
@@ -321,10 +339,18 @@ export default async function DashboardPage() {
                     >
                       <span
                         aria-hidden
-                        className={`absolute -left-[1.9rem] top-6 size-[11px] rounded-full border-2 border-paper ${dot}`}
+                        className={`absolute -left-[1.9rem] top-6 rounded-full border-2 border-paper ${dot} ${
+                          isToday
+                            ? `size-[15px] ring-2 ${todayRing} ring-offset-2 ring-offset-paper`
+                            : "size-[11px]"
+                        }`}
                       />
                       <div className="min-w-0">
-                        <p className="font-serif text-sm font-semibold">
+                        <p
+                          className={`font-serif text-sm font-semibold ${
+                            isToday ? "text-rust" : ""
+                          }`}
+                        >
                           {day.label}
                         </p>
                         <p className="mt-0.5 font-medium">

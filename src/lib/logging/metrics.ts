@@ -68,20 +68,6 @@ export const DEFAULT_SET_COUNT: Record<MeasurementType, number> = {
   time_only: 1,
 };
 
-/** Common workout types, used only as a fallback for `inferWorkoutType` now that
- * the picker is driven by the `workout_types` catalog. */
-export const WORKOUT_TYPE_PRESETS = [
-  "Gym",
-  "Run",
-  "Bike",
-  "Swim",
-  "Workout Class",
-  "Rollerblade",
-  "Hike",
-  "Yoga",
-  "Soccer",
-] as const;
-
 /** Emoji shown for a workout with no type (or a legacy row that never had one). */
 export const DEFAULT_WORKOUT_EMOJI = "💪";
 
@@ -136,20 +122,43 @@ export function isRunningType(workoutType: string): boolean {
 }
 
 /**
- * Best-effort guess a workout type from free text (e.g. a training-plan day's
- * focus like "Easy run" or "Lower-body strength"). Prefers a known preset, then
- * a single-activity keyword. Returns null when nothing matches — the user picks.
+ * Best-effort match a plan day's focus text (e.g. "Easy run", "Long run",
+ * "Lower-body strength") to an existing workout type NAME from the catalog, so
+ * the logging form can preselect it. Matching against the real catalog (rather
+ * than a fixed preset list) is what makes the preselect actually land — the
+ * catalog holds "Running"/"Cycling", not "Run"/"Bike".
+ *
+ * Strategy, most to least specific:
+ *   1. A catalog type whose name appears as a whole word in the focus
+ *      ("Long run" → "Running" via the activity-name map below; "Yoga" → "Yoga").
+ *   2. A single-activity keyword ("run", "bike", …) mapped to its catalog name.
+ * Returns null when nothing matches — the user picks the type themselves.
  */
-export function inferWorkoutType(text: string): string | null {
-  const t = text.toLowerCase();
-  for (const preset of WORKOUT_TYPE_PRESETS) {
-    if (t.includes(preset.toLowerCase())) return preset;
+export function matchWorkoutTypeName(
+  focus: string,
+  typeNames: string[],
+): string | null {
+  const t = focus.toLowerCase();
+  const whole = (needle: string) =>
+    new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(t);
+
+  // 1. Direct catalog-name hit (longest name first, so "Spin Class" beats a
+  //    bare "Spin" and "Trail Running" would beat "Running").
+  const byLength = [...typeNames].sort((a, b) => b.length - a.length);
+  for (const name of byLength) {
+    if (whole(name.toLowerCase())) return name;
   }
-  for (const key of Object.keys(TYPE_TO_EXERCISE_NAME)) {
-    if (new RegExp(`\\b${key}\\b`).test(t)) {
-      return key.charAt(0).toUpperCase() + key.slice(1);
-    }
+
+  // 2. Single-activity keyword → its canonical activity, matched to a catalog
+  //    type by name (case-insensitive). Handles "run"→"Running", "bike"→"Cycling".
+  for (const [keyword, activity] of Object.entries(TYPE_TO_EXERCISE_NAME)) {
+    if (!whole(keyword)) continue;
+    const match = typeNames.find(
+      (n) => n.toLowerCase() === activity.toLowerCase(),
+    );
+    if (match) return match;
   }
+
   return null;
 }
 
