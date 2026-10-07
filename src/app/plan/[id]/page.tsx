@@ -8,6 +8,8 @@ import {
   type PlanWeek,
 } from "@/lib/ai/schemas";
 import { dateForSlot } from "@/lib/logging/plan-dates";
+import { prescribedWorkoutText } from "@/lib/logging/workout-text";
+import { CopyButton } from "@/components/CopyButton";
 import { DeletePlanButton } from "./DeletePlanButton";
 import { EditPlanChat } from "./EditPlanChat";
 import { ReevaluateChat } from "./ReevaluateChat";
@@ -180,10 +182,22 @@ export default async function PlanDetailPage({
                           day.isRestDay ? "bg-faint" : "bg-rust"
                         }`}
                       />
-                      <p className="text-sm font-medium">
-                        <span className="font-serif">{formatDate(date)}</span> ·{" "}
-                        {day.focus}
-                      </p>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-medium">
+                          <span className="font-serif">{formatDate(date)}</span> ·{" "}
+                          {day.focus}
+                        </p>
+                        {!day.isRestDay && (
+                          <CopyButton
+                            className="mt-0.5 shrink-0"
+                            text={prescribedWorkoutText(
+                              day.focus,
+                              day.target,
+                              day.exercises,
+                            )}
+                          />
+                        )}
+                      </div>
                       {day.target && (
                         <p className="text-sm text-muted">{day.target}</p>
                       )}

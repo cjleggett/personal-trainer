@@ -8,6 +8,8 @@ import {
   type MeasurementType,
   type StoredSet,
 } from "@/lib/logging/metrics";
+import { workoutToPlainText } from "@/lib/logging/workout-text";
+import { CopyButton } from "@/components/CopyButton";
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -62,6 +64,23 @@ export default async function WorkoutDetailPage({
     (a, b) => a.position - b.position,
   );
 
+  // Plain-text version for the copy button: one line per exercise, its sets
+  // (collapsed as "N × …") trailing the name. Mirrors the on-screen rendering.
+  const copyText = workoutToPlainText(
+    workout.title || "Workout",
+    instances.map((inst) => {
+      const exercise = inst.exercises;
+      const mt = exercise?.measurement_type as MeasurementType | undefined;
+      const sets = (inst.sets as StoredSet[]) ?? [];
+      const grouped = mt ? collapseSets(sets) : [];
+      const setText = grouped
+        .map((g) => `${g.count > 1 ? `${g.count} × ` : ""}${formatSet(mt!, g.set)}`)
+        .join(", ");
+      const name = exercise?.name ?? "Exercise";
+      return setText ? `${name} ${setText}` : name;
+    }),
+  );
+
   return (
     <>
       <Header email={user.email} />
@@ -93,12 +112,15 @@ export default async function WorkoutDetailPage({
               </p>
             )}
           </div>
-          <Link
-            href={`/workouts/${workout.id}/edit`}
-            className="shrink-0 rounded-full border border-line-strong bg-surface px-4 py-1.5 text-sm font-medium"
-          >
-            Edit
-          </Link>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <Link
+              href={`/workouts/${workout.id}/edit`}
+              className="rounded-full border border-line-strong bg-surface px-4 py-1.5 text-sm font-medium"
+            >
+              Edit
+            </Link>
+            <CopyButton text={copyText} />
+          </div>
         </header>
 
         <div className="flex flex-col gap-4">

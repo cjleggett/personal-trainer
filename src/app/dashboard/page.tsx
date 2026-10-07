@@ -11,6 +11,8 @@ import {
   todayInTimeZone,
   weekdayOf,
 } from "@/lib/logging/plan-dates";
+import { CopyButton } from "@/components/CopyButton";
+import { prescribedWorkoutText } from "@/lib/logging/workout-text";
 import { CoachChat } from "./CoachChat";
 import { TimezoneSync } from "./TimezoneSync";
 
@@ -397,7 +399,7 @@ export default async function DashboardPage() {
                         </p>
                       </div>
                       {!day.isRestDay && (
-                        <div className="shrink-0">
+                        <div className="flex shrink-0 flex-col items-end gap-2">
                           {done ? (
                             <span className="inline-flex items-center gap-1 font-serif text-sm font-semibold text-good">
                               <span aria-hidden>✓</span> Logged
@@ -410,6 +412,14 @@ export default async function DashboardPage() {
                               Log
                             </Link>
                           )}
+                          <CopyButton
+                            text={prescribedWorkoutText(
+                              day.focus,
+                              day.target,
+                              day.exercises,
+                            )}
+                            label="Copy"
+                          />
                         </div>
                       )}
                     </li>

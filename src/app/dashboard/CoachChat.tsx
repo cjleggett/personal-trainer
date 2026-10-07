@@ -10,6 +10,7 @@ import { coachChatKey } from "@/lib/coach/chat-storage";
 import { Markdown } from "@/components/Markdown";
 import { CopyButton } from "@/components/CopyButton";
 import { AutoTextarea } from "@/components/AutoTextarea";
+import { prescribedWorkoutText } from "@/lib/logging/workout-text";
 
 /**
  * The dashboard coach: a general chat where the user can ask questions, report
@@ -346,12 +347,21 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
                 ))}
               </ul>
             ) : null}
-            <Link
-              href={draftHref(draft)}
-              className="mt-3 inline-flex items-center rounded-full bg-rust px-4 py-1.5 text-sm font-medium text-on-rust"
-            >
-              Log this workout
-            </Link>
+            <div className="mt-3 flex items-center gap-4">
+              <Link
+                href={draftHref(draft)}
+                className="inline-flex items-center rounded-full bg-rust px-4 py-1.5 text-sm font-medium text-on-rust"
+              >
+                Log this workout
+              </Link>
+              <CopyButton
+                text={prescribedWorkoutText(
+                  draft.title,
+                  draft.target,
+                  draft.exercises ?? [],
+                )}
+              />
+            </div>
           </div>
         )}
       </div>
