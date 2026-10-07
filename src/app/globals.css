@@ -58,6 +58,20 @@
   --font-sans: var(--font-inter);
   --font-serif: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
+
+  /* Coach "typing" indicator: three dots fading in sequence (staggered by the
+   * per-dot animation-delay utilities at the call site). See CoachChat. */
+  --animate-coach-dot: coach-dot 1.2s infinite ease-in-out both;
+  @keyframes coach-dot {
+    0%,
+    80%,
+    100% {
+      opacity: 0.2;
+    }
+    40% {
+      opacity: 1;
+    }
+  }
 }
 
 /* Keep the native form controls and scrollbars in step with the theme. */

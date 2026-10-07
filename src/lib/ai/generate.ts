@@ -22,6 +22,16 @@ import { recordTokenUsage } from "@/lib/logging/token-usage";
 
 export const GENERATE_TIMEOUT_MS = 45_000;
 
+/**
+ * The tool-using path (coach, plan-edit) gets a longer timeout than a single-shot
+ * call: one "turn" can be several sequential model round-trips (up to
+ * DEFAULT_MAX_STEPS) — a couple of history lookups, maybe a catalog write, then
+ * the final structured answer — so the 45s single-call budget is too tight for
+ * the chain. Single-shot calls (intake, plan generation) keep the shorter budget
+ * so a genuinely stuck request still fails fast and the UI recovers.
+ */
+export const GENERATE_TOOLS_TIMEOUT_MS = 90_000;
+
 export type GenerateResult<T> =
   | { ok: true; object: T }
   | { ok: false; error: string };
@@ -145,10 +155,14 @@ export async function generateValidatedWithTools<T>(input: {
   messages: ModelMessage[];
   tools: ToolSet;
   maxSteps?: number;
+  /** Overrides the abort timeout; defaults to the longer tool-loop budget. */
+  timeoutMs?: number;
   /** Tags the token-usage record so the /usage page can break down by feature. */
   feature?: string;
 }): Promise<GenerateResult<T>> {
-  const abortSignal = AbortSignal.timeout(GENERATE_TIMEOUT_MS);
+  const abortSignal = AbortSignal.timeout(
+    input.timeoutMs ?? GENERATE_TOOLS_TIMEOUT_MS,
+  );
   try {
     const result = await generateText({
       model: generationModel,

@@ -15,7 +15,7 @@ import {
   PLAN_EDIT_SYSTEM_PROMPT,
   REEVALUATE_INSTRUCTION,
 } from "@/lib/ai/prompts/plan-edit";
-import { buildCoachContext } from "@/lib/ai/prompts/coach";
+import { buildCoachContext, planStateBlock } from "@/lib/ai/prompts/coach";
 import {
   profileSummary,
   historySummary,
@@ -23,7 +23,6 @@ import {
   exerciseCatalogSummary,
   workoutTypeCatalogSummary,
 } from "@/lib/logging/aggregates";
-import { weekDateRanges } from "@/lib/logging/plan-dates";
 
 /**
  * The plan-edit chat lives on the plan page and refines ONE specific plan (the
@@ -51,7 +50,7 @@ async function loadPlan(
 ) {
   const { data } = await supabase
     .from("training_plans")
-    .select("id, start_date, plan")
+    .select("id, start_date, plan, target_date, goal_profile")
     .eq("id", planId)
     .maybeSingle();
   return data;
@@ -64,10 +63,14 @@ async function runPlanEditTurn(
   planId: string,
   messages: ModelMessage[],
 ): Promise<PlanEditResult> {
+  // Re-read the plan each turn and append it (skeleton + calendar + goal/race
+  // date) to the system prompt, so it stays visible for the whole conversation
+  // rather than only in the opening message. RLS scopes to the owner.
+  const planRow = await loadPlan(supabase, planId);
   const result = await generateValidatedWithTools({
     feature: "plan-edit",
     schema: planEditTurnSchema,
-    system: PLAN_EDIT_SYSTEM_PROMPT,
+    system: `${PLAN_EDIT_SYSTEM_PROMPT}\n\n${planStateBlock(planRow)}`,
     messages,
     // Read-only history + catalog tools scoped to THIS user; same as the coach.
     tools: buildCoachTools(supabase, userId),
@@ -148,8 +151,6 @@ async function buildOpener(
 
   const opener = buildCoachContext({
     today,
-    planJson: JSON.stringify(parsed.data, null, 2),
-    weekDates: weekDateRanges(row.start_date, parsed.data.weeks.length),
     profileSummary: profile,
     historySummary: history,
     recentDetail,

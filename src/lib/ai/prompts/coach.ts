@@ -13,10 +13,16 @@
  *     dates stay anchored; the model only rearranges the weekday-labeled skeleton.
  */
 
+import { trainingPlanSchema, goalProfileSchema } from "@/lib/ai/schemas";
+import { weekDateRanges } from "@/lib/logging/plan-dates";
+
 export const COACH_SYSTEM_PROMPT = `
 You are the athlete's personal coach, available in a chat on their dashboard.
-You know their training plan, their profile, and their recent training history
-(all provided below). Be warm, concise, and genuinely helpful.
+Their current training plan is included in your context on EVERY turn (the
+"CURRENT TRAINING PLAN" block below); their profile and recent training history
+are in the conversation. Be warm, concise, and genuinely helpful. Never tell the
+athlete you can't see their plan, its weeks, the dates, or the goal — the plan is
+always right there in your context; read it.
 
 Looking up their data — use the query_training_history tool:
 - The context below covers only recent workouts (last ~10 days in detail, plus
@@ -138,15 +144,78 @@ Guidance:
 `.trim();
 
 /**
- * Builds the opening context for a coach session: the current plan (if any),
- * a calendar reference (each week's Monday→Sunday span), the user's profile and
- * recent history, and their first message. `weekDates` is computed by the caller
- * from the plan's start_date (never do date math in the prompt).
+ * Builds the per-turn "current training plan" block that is appended to the
+ * coach's SYSTEM prompt on EVERY turn — not just the opening message, where the
+ * plan would scroll out of attention on a longer conversation and the model
+ * would (wrongly) report it can't see the plan. Mirrors the per-turn date
+ * grounding in `generate.ts`.
+ *
+ * It renders the plan JSON, a calendar reference mapping each week to real
+ * dates, and the durable goal/race date from the goal profile — so the coach can
+ * always answer "what's my race date?" and "which week is Oct 26–30?" without a
+ * tool call. Takes the raw training_plans row (plan + start_date + target_date +
+ * goal_profile); returns a short "no plan" note when there's no active plan.
+ */
+export function planStateBlock(
+  row: {
+    start_date: string;
+    plan: unknown;
+    target_date: string | null;
+    goal_profile: unknown;
+  } | null,
+): string {
+  if (!row) {
+    return "CURRENT TRAINING PLAN\nThe athlete has no active training plan right now.";
+  }
+  const parsed = trainingPlanSchema.safeParse(row.plan);
+  if (!parsed.success) {
+    return "CURRENT TRAINING PLAN\nThe active plan's data is malformed and can't be read.";
+  }
+
+  const weekDates = weekDateRanges(row.start_date, parsed.data.weeks.length);
+  const calendar = weekDates
+    .map((w) => `- Week ${w.weekNumber}: ${w.monday} (Mon) → ${w.sunday} (Sun)`)
+    .join("\n");
+
+  // The goal/race and its date live on the durable goal profile, not the plan
+  // skeleton. Surface them explicitly — this is what the coach was missing.
+  const goal = goalProfileSchema.safeParse(row.goal_profile);
+  const goalLines: string[] = [];
+  if (goal.success) {
+    goalLines.push(`- Goal: ${goal.data.goal}`);
+    const date = goal.data.targetDate ?? row.target_date;
+    goalLines.push(`- Goal/race date: ${date ?? "open-ended (no fixed date)"}`);
+    if (goal.data.targetMetrics.length) {
+      goalLines.push(
+        `- Targets: ${goal.data.targetMetrics
+          .map((m) => `${m.name} ${m.target}`)
+          .join(", ")}`,
+      );
+    }
+  } else if (row.target_date) {
+    goalLines.push(`- Goal/race date: ${row.target_date}`);
+  }
+
+  return [
+    "CURRENT TRAINING PLAN (authoritative — always read this before saying anything about the plan):",
+    goalLines.length ? goalLines.join("\n") : null,
+    "Plan (JSON):",
+    JSON.stringify(parsed.data, null, 2),
+    "Calendar reference — which real dates each plan week covers:",
+    calendar,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Builds the opening context for a coach session: the user's profile and recent
+ * history, the catalogs, and their first message. The training PLAN is NOT here —
+ * it's appended to the system prompt on every turn via `planStateBlock`, so it
+ * stays visible for the whole conversation rather than only in this first message.
  */
 export function buildCoachContext(input: {
   today: string; // YYYY-MM-DD
-  planJson: string | null; // JSON.stringify(current plan), or null if none
-  weekDates: { weekNumber: number; monday: string; sunday: string }[];
   profileSummary: string;
   historySummary: string; // last 90 days, aggregate
   recentDetail: string; // last ~10 days, per-workout detail + notes
@@ -154,16 +223,8 @@ export function buildCoachContext(input: {
   workoutTypeCatalog: string; // the workout-type catalog, with emojis
   firstMessage: string;
 }): string {
-  const planBlock = input.planJson
-    ? `The athlete's current training plan (JSON):\n${input.planJson}\n\nCalendar reference — which real dates each week covers:\n${input.weekDates
-        .map((w) => `- Week ${w.weekNumber}: ${w.monday} (Mon) → ${w.sunday} (Sun)`)
-        .join("\n")}`
-    : "The athlete has no active training plan right now.";
-
   return `
 Today is ${input.today}.
-
-${planBlock}
 
 What their profile says about them:
 ${input.profileSummary}

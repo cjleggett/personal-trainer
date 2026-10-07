@@ -4,14 +4,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { ModelMessage } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import {
-  coachTurnSchema,
-  trainingPlanSchema,
-  type CoachTurn,
-} from "@/lib/ai/schemas";
+import { coachTurnSchema, type CoachTurn } from "@/lib/ai/schemas";
 import { generateValidatedWithTools } from "@/lib/ai/generate";
 import { buildCoachTools } from "@/lib/ai/coach-tools";
-import { COACH_SYSTEM_PROMPT, buildCoachContext } from "@/lib/ai/prompts/coach";
+import {
+  COACH_SYSTEM_PROMPT,
+  buildCoachContext,
+  planStateBlock,
+} from "@/lib/ai/prompts/coach";
 import {
   profileSummary,
   historySummary,
@@ -19,7 +19,6 @@ import {
   exerciseCatalogSummary,
   workoutTypeCatalogSummary,
 } from "@/lib/logging/aggregates";
-import { weekDateRanges } from "@/lib/logging/plan-dates";
 
 /**
  * The dashboard coach is stateless on the server, mirroring intake: the client
@@ -35,13 +34,23 @@ export type CoachResult =
   | { ok: true; turn: CoachTurn; messages: ModelMessage[] }
   | { ok: false; error: string };
 
+/** The active plan row (or null), with everything the coach needs each turn:
+ * the dated skeleton, its anchor, and the durable goal/race date. */
+type PlanRow = {
+  id: string;
+  start_date: string;
+  plan: unknown;
+  target_date: string | null;
+  goal_profile: unknown;
+};
+
 /** Load the user's active plan row, or null. RLS scopes to the owner. */
 async function loadActivePlan(
   supabase: Awaited<ReturnType<typeof createClient>>,
-) {
+): Promise<PlanRow | null> {
   const { data } = await supabase
     .from("training_plans")
-    .select("id, start_date, plan")
+    .select("id, start_date, plan, target_date, goal_profile")
     .eq("status", "active")
     .order("start_date", { ascending: false })
     .limit(1)
@@ -49,17 +58,19 @@ async function loadActivePlan(
   return data;
 }
 
-/** Run one coach turn: call the model, and persist the plan if it changed. */
+/** Run one coach turn: call the model, and persist the plan if it changed. The
+ * current plan (skeleton, calendar, and goal/race date) is appended to the
+ * system prompt EVERY turn so it never scrolls out of the model's context. */
 async function runCoachTurn(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  planId: string | null,
+  plan: PlanRow | null,
   messages: ModelMessage[],
 ): Promise<CoachResult> {
   const result = await generateValidatedWithTools({
     feature: "coach",
     schema: coachTurnSchema,
-    system: COACH_SYSTEM_PROMPT,
+    system: `${COACH_SYSTEM_PROMPT}\n\n${planStateBlock(plan)}`,
     messages,
     // Read-only query tools scoped to THIS user; the model can't widen the scope.
     tools: buildCoachTools(supabase, userId),
@@ -82,7 +93,7 @@ async function runCoachTurn(
   // stay anchored; the coach may re-anchor it via newStartDate (e.g. "start a
   // week earlier"), which shifts every plan day by the same offset.
   if (turn.kind === "updatePlan") {
-    if (!planId) {
+    if (!plan) {
       return { ok: false, error: "There's no active plan to update." };
     }
     const update: {
@@ -98,12 +109,12 @@ async function runCoachTurn(
     const { error } = await supabase
       .from("training_plans")
       .update(update)
-      .eq("id", planId); // RLS scopes to the owner
+      .eq("id", plan.id); // RLS scopes to the owner
     if (error) {
       return { ok: false, error: `Couldn't save the change: ${error.message}` };
     }
     revalidatePath("/dashboard");
-    revalidatePath(`/plan/${planId}`);
+    revalidatePath(`/plan/${plan.id}`);
   }
 
   const updated: ModelMessage[] = [
@@ -138,22 +149,8 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
       workoutTypeCatalogSummary(supabase),
     ]);
 
-  let planJson: string | null = null;
-  let weekDates: ReturnType<typeof weekDateRanges> = [];
-  let planId: string | null = null;
-  if (row) {
-    const parsed = trainingPlanSchema.safeParse(row.plan);
-    if (parsed.success) {
-      planJson = JSON.stringify(parsed.data, null, 2);
-      weekDates = weekDateRanges(row.start_date, parsed.data.weeks.length);
-      planId = row.id;
-    }
-  }
-
   const opener = buildCoachContext({
     today,
-    planJson,
-    weekDates,
     profileSummary: profile,
     historySummary: history,
     recentDetail,
@@ -162,7 +159,7 @@ export async function startCoach(firstMessage: string): Promise<CoachResult> {
     firstMessage,
   });
 
-  return runCoachTurn(supabase, user.id, planId, [
+  return runCoachTurn(supabase, user.id, row, [
     { role: "user", content: opener },
   ]);
 }
@@ -188,5 +185,5 @@ export async function continueCoach(
     ...history,
     { role: "user", content: userMessage },
   ];
-  return runCoachTurn(supabase, user.id, row?.id ?? null, messages);
+  return runCoachTurn(supabase, user.id, row, messages);
 }
