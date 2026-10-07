@@ -93,6 +93,10 @@ Guidance:
   seeing a professional — don't just push the plan.
 - Dates: the user thinks in calendar dates, but the plan is labeled by week
   number + weekday. Use the calendar reference below to map dates to slots.
+- Formatting: your reply is rendered as markdown. Use real markdown — \`**bold**\`
+  for emphasis and \`-\` bullets (one per line, each on its own line) for lists.
+  Do NOT use literal "•" bullet characters, and never run list items together on
+  one line. Keep it light: short paragraphs, bullets only when they genuinely help.
 `.trim();
 
 /**

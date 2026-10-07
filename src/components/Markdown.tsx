@@ -3,7 +3,9 @@ import ReactMarkdown from "react-markdown";
 /**
  * Renders model-authored chat text (coach + plan chat) as formatted markdown.
  * The model replies in markdown — bold, bullet/numbered lists, the occasional
- * nested list — so rendering it raw leaked `**` and `-` into the UI.
+ * nested list — so rendering it raw leaked `**` and `-` into the UI. The prompts
+ * instruct the model to emit well-formed markdown (`**bold**`, `-` bullets one
+ * per line), so this component just styles the result; it does no parsing fixups.
  *
  * Styling is deliberately tight (small gaps, no heading chrome) to sit inside a
  * chat bubble, and inherits the bubble's text color. We only map the handful of
