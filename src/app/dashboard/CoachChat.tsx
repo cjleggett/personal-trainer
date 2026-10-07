@@ -7,6 +7,8 @@ import type { ModelMessage } from "ai";
 import type { WorkoutDraft } from "@/lib/ai/schemas";
 import { startCoach, continueCoach, type CoachResult } from "./coach-actions";
 import { coachChatKey } from "@/lib/coach/chat-storage";
+import { Markdown } from "@/components/Markdown";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 /**
  * The dashboard coach: a general chat where the user can ask questions, report
@@ -135,6 +137,15 @@ export function CoachChat({ userId }: { userId: string }) {
     if (expanded || nearBottom) el.scrollTop = el.scrollHeight;
   }, [chat, isPending, expanded]);
 
+  // The open panel is tall (full-height list + input), so expanding it near the
+  // bottom of the page can leave the input below the fold. Scroll the input row
+  // into view on expand so the user can start typing without scrolling.
+  const inputRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    inputRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [expanded]);
+
   /** Wipe the conversation (state + persisted copy). */
   function clearChat() {
     setMessages([]);
@@ -225,36 +236,50 @@ export function CoachChat({ userId }: { userId: string }) {
             </div>
           )}
 
-          {chat.length > 0 && (
+          {/* The list + input share one fixed-height region, so the panel's
+              overall size is settled the moment it opens and never changes. The
+              list flexes to fill the space; as the input grows for a longer
+              message it expands UP into the list, which shrinks and scrolls. */}
+          <div className="mt-4 flex h-[28rem] flex-col">
             <div
               ref={listRef}
-              className="mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
             >
-              {chat.map((b, i) => (
-                <ChatBubble key={i} bubble={b} />
-              ))}
-              {isPending && <LoadingBubble elapsed={elapsed} />}
+              {chat.length === 0 && !isPending ? (
+                <p className="m-auto max-w-xs text-center text-sm text-faint">
+                  Your conversation will appear here.
+                </p>
+              ) : (
+                <>
+                  {chat.map((b, i) => (
+                    <ChatBubble key={i} bubble={b} />
+                  ))}
+                  {isPending && <LoadingBubble elapsed={elapsed} />}
+                </>
+              )}
             </div>
-          )}
 
-          {error && <p className="mt-3 text-sm text-rust">{error}</p>}
+            {error && <p className="mt-3 text-sm text-rust">{error}</p>}
 
-          <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={2}
-              placeholder="Tell me how you're feeling, ask a question, or log a workout…"
-              className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
-            />
-            <button
-              onClick={send}
-              disabled={isPending || !input.trim()}
-              className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+            <div
+              ref={inputRef}
+              className="mt-4 flex items-end gap-2 border-t border-line pt-4"
             >
-              Send
-            </button>
+              <AutoTextarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Tell me how you're feeling, ask a question, or log a workout…"
+                className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+              />
+              <button
+                onClick={send}
+                disabled={isPending || !input.trim()}
+                className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -286,13 +311,13 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] space-y-2 whitespace-pre-wrap px-4 py-2.5 text-sm ${
+        className={`max-w-[85%] space-y-2 px-4 py-2.5 text-sm ${
           isUser
-            ? "rounded-[18px] rounded-br-md bg-ink text-paper"
+            ? "rounded-[18px] rounded-br-md whitespace-pre-wrap bg-ink text-paper"
             : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
-        <p>{bubble.text}</p>
+        {isUser ? <p>{bubble.text}</p> : <Markdown>{bubble.text}</Markdown>}
         {draft && (
           <div className="rounded-2xl border border-dashed border-line-strong bg-paper p-4">
             <p className="font-serif text-sm italic text-rust">May I suggest…</p>

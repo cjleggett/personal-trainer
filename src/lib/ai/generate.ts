@@ -36,9 +36,12 @@ export type GenerateResult<T> =
   | { ok: true; object: T }
   | { ok: false; error: string };
 
-/** Map a raw error into a short, user-facing message. */
-function friendlyMessage(err: unknown): string {
+/** Map a raw error into a short, user-facing message. The raw error is logged
+ * server-side first — the friendly string we return hides the cause, so without
+ * this a failure leaves no trace to debug. `context` tags which call failed. */
+function friendlyMessage(err: unknown, context: string): string {
   const raw = err instanceof Error ? err.message : String(err);
+  console.error(`[ai:${context}] generation failed:`, err);
   const lower = raw.toLowerCase();
 
   // Our own abort (timeout) or the SDK's abort surfaces as an AbortError/timeout.
@@ -118,7 +121,7 @@ export async function generateValidated<T>(input: {
 
     return { ok: true, object: result.object };
   } catch (err) {
-    return { ok: false, error: friendlyMessage(err) };
+    return { ok: false, error: friendlyMessage(err, input.feature ?? "generate") };
   }
 }
 
@@ -179,6 +182,6 @@ export async function generateValidatedWithTools<T>(input: {
 
     return { ok: true, object: result.output };
   } catch (err) {
-    return { ok: false, error: friendlyMessage(err) };
+    return { ok: false, error: friendlyMessage(err, input.feature ?? "generate-tools") };
   }
 }

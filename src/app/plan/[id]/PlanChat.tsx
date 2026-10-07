@@ -4,6 +4,8 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { ModelMessage } from "ai";
 import type { PlanEditResult } from "../edit-actions";
+import { Markdown } from "@/components/Markdown";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 /**
  * The shared chat panel used on the plan page. It refines THIS plan in place and
@@ -133,6 +135,15 @@ export function PlanChat({
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [chat, isPending]);
 
+  // The open panel is tall (full-height list + input), so expanding it near the
+  // bottom of the page can leave the input below the fold. Scroll the input row
+  // into view on open so the user can start typing without scrolling.
+  const inputRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [open]);
+
   function apply(result: PlanEditResult) {
     if (!result.ok) {
       setError(result.error);
@@ -231,36 +242,50 @@ export function PlanChat({
             )}
           </div>
 
-          {chat.length > 0 && (
+          {/* The list + input share one fixed-height region, so the panel's
+              overall size is settled the moment it opens and never changes. The
+              list flexes to fill the space; as the input grows for a longer
+              message it expands UP into the list, which shrinks and scrolls. */}
+          <div className="mt-4 flex h-[28rem] flex-col">
             <div
               ref={listRef}
-              className="mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
             >
-              {chat.map((b, i) => (
-                <ChatBubble key={i} bubble={b} />
-              ))}
-              {isPending && <LoadingBubble elapsed={elapsed} />}
+              {chat.length === 0 && !isPending ? (
+                <p className="m-auto max-w-xs text-center text-sm text-faint">
+                  Your conversation will appear here.
+                </p>
+              ) : (
+                <>
+                  {chat.map((b, i) => (
+                    <ChatBubble key={i} bubble={b} />
+                  ))}
+                  {isPending && <LoadingBubble elapsed={elapsed} />}
+                </>
+              )}
             </div>
-          )}
 
-          {error && <p className="mt-3 text-sm text-rust">{error}</p>}
+            {error && <p className="mt-3 text-sm text-rust">{error}</p>}
 
-          <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={2}
-              placeholder={placeholder}
-              className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
-            />
-            <button
-              onClick={send}
-              disabled={isPending || !input.trim()}
-              className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+            <div
+              ref={inputRef}
+              className="mt-4 flex items-end gap-2 border-t border-line pt-4"
             >
-              Send
-            </button>
+              <AutoTextarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+              />
+              <button
+                onClick={send}
+                disabled={isPending || !input.trim()}
+                className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -291,13 +316,13 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap px-4 py-2.5 text-sm ${
+        className={`max-w-[85%] px-4 py-2.5 text-sm ${
           isUser
-            ? "rounded-[18px] rounded-br-md bg-ink text-paper"
+            ? "rounded-[18px] rounded-br-md whitespace-pre-wrap bg-ink text-paper"
             : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
-        {bubble.text}
+        {isUser ? bubble.text : <Markdown>{bubble.text}</Markdown>}
       </div>
     </div>
   );
