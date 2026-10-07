@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ModelMessage } from "ai";
 import type { PlanEditResult } from "../edit-actions";
 import { Markdown } from "@/components/Markdown";
+import { CopyButton } from "@/components/CopyButton";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
 /**
@@ -322,7 +323,16 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
             : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
-        {isUser ? bubble.text : <Markdown>{bubble.text}</Markdown>}
+        {isUser ? (
+          bubble.text
+        ) : (
+          <div className="space-y-2">
+            <Markdown>{bubble.text}</Markdown>
+            <div className="flex justify-end">
+              <CopyButton text={bubble.text} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

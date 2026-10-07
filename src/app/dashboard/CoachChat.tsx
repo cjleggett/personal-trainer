@@ -8,6 +8,7 @@ import type { WorkoutDraft } from "@/lib/ai/schemas";
 import { startCoach, continueCoach, type CoachResult } from "./coach-actions";
 import { coachChatKey } from "@/lib/coach/chat-storage";
 import { Markdown } from "@/components/Markdown";
+import { CopyButton } from "@/components/CopyButton";
 import { AutoTextarea } from "@/components/AutoTextarea";
 
 /**
@@ -318,6 +319,11 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
         }`}
       >
         {isUser ? <p>{bubble.text}</p> : <Markdown>{bubble.text}</Markdown>}
+        {!isUser && (
+          <div className="flex justify-end">
+            <CopyButton text={bubble.text} />
+          </div>
+        )}
         {draft && (
           <div className="rounded-2xl border border-dashed border-line-strong bg-paper p-4">
             <p className="font-serif text-sm italic text-rust">May I suggest…</p>
