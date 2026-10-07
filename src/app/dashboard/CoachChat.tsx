@@ -137,6 +137,15 @@ export function CoachChat({ userId }: { userId: string }) {
     if (expanded || nearBottom) el.scrollTop = el.scrollHeight;
   }, [chat, isPending, expanded]);
 
+  // The open panel is tall (full-height list + input), so expanding it near the
+  // bottom of the page can leave the input below the fold. Scroll the input row
+  // into view on expand so the user can start typing without scrolling.
+  const inputRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    inputRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [expanded]);
+
   /** Wipe the conversation (state + persisted copy). */
   function clearChat() {
     setMessages([]);
@@ -250,7 +259,10 @@ export function CoachChat({ userId }: { userId: string }) {
 
           {error && <p className="mt-3 text-sm text-rust">{error}</p>}
 
-          <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
+          <div
+            ref={inputRef}
+            className="mt-4 flex items-end gap-2 border-t border-line pt-4"
+          >
             <AutoTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

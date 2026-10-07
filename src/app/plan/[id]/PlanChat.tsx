@@ -135,6 +135,15 @@ export function PlanChat({
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [chat, isPending]);
 
+  // The open panel is tall (full-height list + input), so expanding it near the
+  // bottom of the page can leave the input below the fold. Scroll the input row
+  // into view on open so the user can start typing without scrolling.
+  const inputRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [open]);
+
   function apply(result: PlanEditResult) {
     if (!result.ok) {
       setError(result.error);
@@ -256,7 +265,10 @@ export function PlanChat({
 
           {error && <p className="mt-3 text-sm text-rust">{error}</p>}
 
-          <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
+          <div
+            ref={inputRef}
+            className="mt-4 flex items-end gap-2 border-t border-line pt-4"
+          >
             <AutoTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
