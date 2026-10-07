@@ -7,6 +7,7 @@ import type { ModelMessage } from "ai";
 import type { WorkoutDraft } from "@/lib/ai/schemas";
 import { startCoach, continueCoach, type CoachResult } from "./coach-actions";
 import { coachChatKey } from "@/lib/coach/chat-storage";
+import { Markdown } from "@/components/Markdown";
 
 /**
  * The dashboard coach: a general chat where the user can ask questions, report
@@ -286,13 +287,13 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] space-y-2 whitespace-pre-wrap px-4 py-2.5 text-sm ${
+        className={`max-w-[85%] space-y-2 px-4 py-2.5 text-sm ${
           isUser
-            ? "rounded-[18px] rounded-br-md bg-ink text-paper"
+            ? "rounded-[18px] rounded-br-md whitespace-pre-wrap bg-ink text-paper"
             : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
-        <p>{bubble.text}</p>
+        {isUser ? <p>{bubble.text}</p> : <Markdown>{bubble.text}</Markdown>}
         {draft && (
           <div className="rounded-2xl border border-dashed border-line-strong bg-paper p-4">
             <p className="font-serif text-sm italic text-rust">May I suggest…</p>

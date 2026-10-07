@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { ModelMessage } from "ai";
 import type { PlanEditResult } from "../edit-actions";
+import { Markdown } from "@/components/Markdown";
 
 /**
  * The shared chat panel used on the plan page. It refines THIS plan in place and
@@ -291,13 +292,13 @@ function ChatBubble({ bubble }: { bubble: Bubble }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap px-4 py-2.5 text-sm ${
+        className={`max-w-[85%] px-4 py-2.5 text-sm ${
           isUser
-            ? "rounded-[18px] rounded-br-md bg-ink text-paper"
+            ? "rounded-[18px] rounded-br-md whitespace-pre-wrap bg-ink text-paper"
             : "rounded-[18px] rounded-bl-md bg-rust-soft text-ink"
         }`}
       >
-        {bubble.text}
+        {isUser ? bubble.text : <Markdown>{bubble.text}</Markdown>}
       </div>
     </div>
   );
