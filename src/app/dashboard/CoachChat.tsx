@@ -8,6 +8,7 @@ import type { WorkoutDraft } from "@/lib/ai/schemas";
 import { startCoach, continueCoach, type CoachResult } from "./coach-actions";
 import { coachChatKey } from "@/lib/coach/chat-storage";
 import { Markdown } from "@/components/Markdown";
+import { AutoTextarea } from "@/components/AutoTextarea";
 
 /**
  * The dashboard coach: a general chat where the user can ask questions, report
@@ -226,26 +227,34 @@ export function CoachChat({ userId }: { userId: string }) {
             </div>
           )}
 
-          {chat.length > 0 && (
-            <div
-              ref={listRef}
-              className="mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
-            >
-              {chat.map((b, i) => (
-                <ChatBubble key={i} bubble={b} />
-              ))}
-              {isPending && <LoadingBubble elapsed={elapsed} />}
-            </div>
-          )}
+          {/* Reserve the list's full height as soon as the panel opens, so the
+              layout settles once here instead of jumping taller with each turn.
+              Empty, it shows a gentle prompt centered in that space. */}
+          <div
+            ref={listRef}
+            className="mt-4 flex h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
+          >
+            {chat.length === 0 && !isPending ? (
+              <p className="m-auto max-w-xs text-center text-sm text-faint">
+                Your conversation will appear here.
+              </p>
+            ) : (
+              <>
+                {chat.map((b, i) => (
+                  <ChatBubble key={i} bubble={b} />
+                ))}
+                {isPending && <LoadingBubble elapsed={elapsed} />}
+              </>
+            )}
+          </div>
 
           {error && <p className="mt-3 text-sm text-rust">{error}</p>}
 
           <div className="mt-4 flex items-end gap-2 border-t border-line pt-4">
-            <textarea
+            <AutoTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
-              rows={2}
               placeholder="Tell me how you're feeling, ask a question, or log a workout…"
               className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
             />
