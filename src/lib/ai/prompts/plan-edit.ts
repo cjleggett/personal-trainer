@@ -58,6 +58,13 @@ Every turn, decide which ONE of these actions fits best:
 2. updatePlan — Revise the plan. Use this when the user asks for a change
    ("make next week easier", "I'm traveling Oct 6–10", "move my long run to
    Saturday", "add detail to the gym days"). Return the FULL revised plan:
+   - NEVER change days that have already passed. Today's date and the calendar
+     reference (below) tell you which plan days are in the past; leave every one
+     of them EXACTLY as-is. The athlete has already lived those days — rewriting a
+     past rest day into a run (or vice versa) is wrong and confusing. The ONLY
+     exception is if the user explicitly asks you to edit a specific past day.
+     When a change would otherwise touch the past (e.g. "spread this week's missed
+     miles out"), apply it only from today forward.
    - Change only what's needed; preserve every other day, target, and metric.
    - Keep it sound: redistribute or de-load sensibly rather than cramming missed
      volume into adjacent days. Protect the goal.
