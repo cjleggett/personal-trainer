@@ -76,6 +76,21 @@ export function CoachChat({ userId }: { userId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  // While a turn is in flight, show how long we've been waiting on the coach.
+  // We derive the count from a start timestamp captured when the request begins,
+  // so the effect only ticks (never resets state synchronously) and the number
+  // stays accurate even if a tick is delayed.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!isPending) return;
+    const started = Date.now();
+    const id = setInterval(
+      () => setElapsed(Math.floor((Date.now() - started) / 1000)),
+      250,
+    );
+    return () => clearInterval(id);
+  }, [isPending]);
+
   // Restore a saved conversation on mount. We start from empty state (so the
   // server-rendered markup matches) and hydrate from localStorage in an effect
   // to avoid an SSR/client mismatch. `restored` gates the persist effect so we
@@ -218,9 +233,7 @@ export function CoachChat({ userId }: { userId: string }) {
               {chat.map((b, i) => (
                 <ChatBubble key={i} bubble={b} />
               ))}
-              {isPending && (
-                <ChatBubble bubble={{ role: "assistant", text: "…" }} />
-              )}
+              {isPending && <LoadingBubble elapsed={elapsed} />}
             </div>
           )}
 
@@ -246,6 +259,24 @@ export function CoachChat({ userId }: { userId: string }) {
         </>
       )}
     </section>
+  );
+}
+
+/** The "coach is thinking" placeholder: an assistant bubble with three dots
+ * fading in sequence, plus a running seconds counter so a slow turn still feels
+ * alive. Matches the assistant bubble styling in ChatBubble. */
+function LoadingBubble({ elapsed }: { elapsed: number }) {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-2.5 rounded-[18px] rounded-bl-md bg-rust-soft px-4 py-2.5">
+        <span className="flex items-center gap-1" aria-label="Coach is thinking">
+          <span className="h-1.5 w-1.5 rounded-full bg-rust animate-coach-dot" />
+          <span className="h-1.5 w-1.5 rounded-full bg-rust animate-coach-dot [animation-delay:0.2s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-rust animate-coach-dot [animation-delay:0.4s]" />
+        </span>
+        <span className="text-xs tabular-nums text-muted">{elapsed}s</span>
+      </div>
+    </div>
   );
 }
 
