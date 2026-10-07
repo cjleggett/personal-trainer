@@ -242,47 +242,50 @@ export function PlanChat({
             )}
           </div>
 
-          {/* Reserve the list's full height as soon as the panel opens, so the
-              layout settles once here instead of jumping taller with each turn.
-              Empty, it shows a gentle prompt centered in that space. */}
-          <div
-            ref={listRef}
-            className="mt-4 flex h-96 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
-          >
-            {chat.length === 0 && !isPending ? (
-              <p className="m-auto max-w-xs text-center text-sm text-faint">
-                Your conversation will appear here.
-              </p>
-            ) : (
-              <>
-                {chat.map((b, i) => (
-                  <ChatBubble key={i} bubble={b} />
-                ))}
-                {isPending && <LoadingBubble elapsed={elapsed} />}
-              </>
-            )}
-          </div>
-
-          {error && <p className="mt-3 text-sm text-rust">{error}</p>}
-
-          <div
-            ref={inputRef}
-            className="mt-4 flex items-end gap-2 border-t border-line pt-4"
-          >
-            <AutoTextarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={placeholder}
-              className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
-            />
-            <button
-              onClick={send}
-              disabled={isPending || !input.trim()}
-              className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+          {/* The list + input share one fixed-height region, so the panel's
+              overall size is settled the moment it opens and never changes. The
+              list flexes to fill the space; as the input grows for a longer
+              message it expands UP into the list, which shrinks and scrolls. */}
+          <div className="mt-4 flex h-[28rem] flex-col">
+            <div
+              ref={listRef}
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth"
             >
-              Send
-            </button>
+              {chat.length === 0 && !isPending ? (
+                <p className="m-auto max-w-xs text-center text-sm text-faint">
+                  Your conversation will appear here.
+                </p>
+              ) : (
+                <>
+                  {chat.map((b, i) => (
+                    <ChatBubble key={i} bubble={b} />
+                  ))}
+                  {isPending && <LoadingBubble elapsed={elapsed} />}
+                </>
+              )}
+            </div>
+
+            {error && <p className="mt-3 text-sm text-rust">{error}</p>}
+
+            <div
+              ref={inputRef}
+              className="mt-4 flex items-end gap-2 border-t border-line pt-4"
+            >
+              <AutoTextarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                className="flex-1 resize-none rounded-[14px] border border-line-strong bg-paper px-3 py-2 text-base text-ink placeholder:text-faint focus:border-rust focus:outline-none"
+              />
+              <button
+                onClick={send}
+                disabled={isPending || !input.trim()}
+                className="rounded-[14px] bg-ink px-5 py-2.5 text-sm font-medium text-paper disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
           </div>
         </div>
       )}
