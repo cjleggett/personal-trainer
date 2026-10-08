@@ -53,7 +53,7 @@ export default async function EditWorkoutPage({
       supabase
         .from("workouts")
         .select(
-          "id, title, workout_type_id, notes, performed_at, shoe_id, plan_id, plan_day_date, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
+          "id, title, workout_type_id, notes, performed_at, duration_s, shoe_id, plan_id, plan_day_date, exercise_instances(position, sets, exercise_id, exercises(measurement_type))",
         )
         .eq("id", id)
         .single(),
@@ -78,6 +78,7 @@ export default async function EditWorkoutPage({
     workoutTypeId: workout.workout_type_id ?? null,
     notes: workout.notes ?? "",
     performedOn: toDateInput(workout.performed_at),
+    durationS: workout.duration_s ?? null,
     shoeId: workout.shoe_id ?? null,
     planDayDate: workout.plan_day_date ?? null,
     instances: [...workout.exercise_instances]

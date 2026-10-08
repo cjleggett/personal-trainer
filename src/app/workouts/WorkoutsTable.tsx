@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Combobox } from "./Combobox";
+import { formatDurationS } from "@/lib/logging/metrics";
 
 export type WorkoutRow = {
   id: string;
@@ -27,17 +28,6 @@ function formatDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
-}
-
-/** Seconds → "h:mm:ss" or "m:ss"; blank for zero. */
-function formatDuration(seconds: number): string {
-  if (seconds <= 0) return "—";
-  const total = Math.round(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 export function WorkoutsTable({ rows }: { rows: WorkoutRow[] }) {
@@ -188,7 +178,7 @@ export function WorkoutsTable({ rows }: { rows: WorkoutRow[] }) {
                 {w.miles > 0 ? Math.round(w.miles * 100) / 100 : "—"}
               </td>
               <td className="px-5 py-3 text-right tabular-nums">
-                {formatDuration(w.seconds)}
+                {formatDurationS(w.seconds)}
               </td>
             </tr>
           ))}

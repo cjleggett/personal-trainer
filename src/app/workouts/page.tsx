@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/app/Header";
-import { METERS_PER_MILE, DEFAULT_WORKOUT_EMOJI } from "@/lib/logging/metrics";
+import {
+  METERS_PER_MILE,
+  DEFAULT_WORKOUT_EMOJI,
+  effectiveWorkoutDurationS,
+} from "@/lib/logging/metrics";
 import { WorkoutsTable, type WorkoutRow } from "./WorkoutsTable";
 
 export default async function WorkoutsPage() {
@@ -15,7 +19,7 @@ export default async function WorkoutsPage() {
   const { data: workouts } = await supabase
     .from("workouts")
     .select(
-      "id, title, performed_at, workout_types(name, emoji), exercise_instances(total_distance_m, total_duration_s)",
+      "id, title, performed_at, duration_s, workout_types(name, emoji), exercise_instances(total_distance_m, total_duration_s)",
     )
     .order("performed_at", { ascending: false });
 
@@ -24,9 +28,9 @@ export default async function WorkoutsPage() {
       (s, i) => s + (i.total_distance_m ?? 0),
       0,
     );
-    const seconds = w.exercise_instances.reduce(
-      (s, i) => s + (i.total_duration_s ?? 0),
-      0,
+    const seconds = effectiveWorkoutDurationS(
+      w.duration_s,
+      w.exercise_instances.map((i) => i.total_duration_s),
     );
     const type = w.workout_types as { name: string; emoji: string } | null;
     return {
