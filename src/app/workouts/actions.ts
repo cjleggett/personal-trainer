@@ -29,6 +29,13 @@ export type SavePayload = {
    * title without a DB round-trip. Not stored directly — the FK id is. */
   workoutTypeName?: string;
   notes?: string;
+  /**
+   * Optional top-level session duration in SECONDS, entered by hand for sessions
+   * where per-exercise time doesn't make sense (gym, a class). Overrides the
+   * per-exercise rollup when set; omit/undefined (or null on edit) = none, let
+   * the rollup stand. Only surfaced for non-cardio types in the form.
+   */
+  durationS?: number | null;
   /** ISO date (YYYY-MM-DD) of when the workout happened. Defaults to today. */
   performedOn?: string;
   /**
@@ -85,6 +92,15 @@ function buildWorkoutFields(payload: SavePayload) {
     ? new Date(`${payload.performedOn}T12:00:00`).toISOString()
     : undefined; // let the DB default (now()) apply on create
   return { workoutTypeId, title, performedAt };
+}
+
+/** Normalize the optional manual duration to a positive whole second count, or
+ * null (blank/zero/invalid). Returned on both create and update so an edit that
+ * clears the field writes null, dropping the override back to the rollup. */
+function durationColumn(payload: SavePayload): number | null {
+  const s = payload.durationS;
+  if (s == null || !Number.isFinite(s) || s <= 0) return null;
+  return Math.round(s);
 }
 
 /**
@@ -182,6 +198,7 @@ export async function createWorkout(payload: SavePayload) {
       title,
       workout_type_id: workoutTypeId,
       notes: payload.notes?.trim() || null,
+      duration_s: durationColumn(payload),
       shoe_id: shoe.shoeId,
       ...(performedAt ? { performed_at: performedAt } : {}),
       ...planLinkFields(payload),
@@ -228,6 +245,7 @@ export async function updateWorkout(workoutId: string, payload: SavePayload) {
       title,
       workout_type_id: workoutTypeId,
       notes: payload.notes?.trim() || null,
+      duration_s: durationColumn(payload), // null clears a previously-set override
       shoe_id: shoe.shoeId, // null clears a previously-attached pair
       ...(performedAt ? { performed_at: performedAt } : {}),
       ...planLinkFields(payload), // null columns clear a previously-linked plan day
