@@ -306,6 +306,7 @@ export type Database = {
       workouts: {
         Row: {
           created_at: string
+          duration_s: number | null
           extra: Json
           id: string
           notes: string | null
@@ -319,6 +320,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          duration_s?: number | null
           extra?: Json
           id?: string
           notes?: string | null
@@ -332,6 +334,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          duration_s?: number | null
           extra?: Json
           id?: string
           notes?: string | null

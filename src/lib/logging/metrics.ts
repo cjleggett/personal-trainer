@@ -289,6 +289,34 @@ export function formatSet(
   return parts.join(" · ");
 }
 
+/** Seconds → "h:mm:ss" or "m:ss"; "—" for zero/negative. */
+export function formatDurationS(seconds: number): string {
+  if (seconds <= 0) return "—";
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/**
+ * The session's effective duration in seconds: a manually-entered top-level
+ * `workouts.duration_s` wins outright; otherwise fall back to the sum of the
+ * exercises' rolled-up durations. 0 (or an empty workout) reads as "no duration".
+ * Keep every surface that shows a session duration (history list, detail header,
+ * coach summaries) going through this so they never disagree.
+ */
+export function effectiveWorkoutDurationS(
+  manualS: number | null | undefined,
+  instanceDurationsS: Iterable<number | null | undefined>,
+): number {
+  if (manualS != null && manualS > 0) return manualS;
+  let sum = 0;
+  for (const d of instanceDurationsS) sum += d ?? 0;
+  return sum;
+}
+
 /** Collapse consecutive identical sets into { set, count } for readable display,
  * inverting the save-time expansion (3 identical sets → "3 × …"). */
 export function collapseSets(

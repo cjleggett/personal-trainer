@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import {
   collapseSets,
   formatSet,
+  effectiveWorkoutDurationS,
   type MeasurementType,
   type StoredSet,
 } from "@/lib/logging/metrics";
@@ -120,7 +121,7 @@ export async function historySummary(
   const { data: workouts } = await supabase
     .from("workouts")
     .select(
-      `id, performed_at, workout_types ( name ),
+      `id, performed_at, duration_s, workout_types ( name ),
        exercise_instances ( total_load, total_distance_m, total_duration_s, total_elevation_m )`,
     )
     .eq("user_id", userId)
@@ -149,10 +150,15 @@ export async function historySummary(
     agg.sessions += 1;
     for (const inst of w.exercise_instances ?? []) {
       agg.distanceM += inst.total_distance_m ?? 0;
-      agg.durationS += inst.total_duration_s ?? 0;
       agg.load += inst.total_load ?? 0;
       agg.elevationM += inst.total_elevation_m ?? 0;
     }
+    // A hand-entered session time overrides the per-exercise rollup (e.g. a gym
+    // workout whose exercises don't carry time); else sum the instances.
+    agg.durationS += effectiveWorkoutDurationS(
+      w.duration_s,
+      (w.exercise_instances ?? []).map((i) => i.total_duration_s),
+    );
     byType.set(type, agg);
   }
 

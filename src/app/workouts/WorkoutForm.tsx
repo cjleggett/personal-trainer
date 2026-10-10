@@ -49,6 +49,8 @@ export type InitialWorkout = {
   workoutTypeId: string | null;
   notes: string;
   performedOn: string; // YYYY-MM-DD
+  /** Manually-entered total session time in seconds, if any (non-cardio types). */
+  durationS: number | null;
   shoeId: string | null; // currently-attached pair, if any
   /** The plan day this workout is currently linked to, if any. */
   planDayDate: string | null; // YYYY-MM-DD
@@ -166,6 +168,16 @@ export function WorkoutForm({
     return planned && planned <= today ? planned : today;
   });
 
+  // Manual total session time, for non-cardio types only (a run's time already
+  // lives in its distance_time sets). Held as a display-minutes string — same
+  // representation the per-exercise duration field uses — and sent as seconds.
+  // Seeded from an existing override when editing.
+  const [durationMin, setDurationMin] = useState<string>(
+    initial?.durationS != null && initial.durationS > 0
+      ? String(Math.round((initial.durationS / 60) * 1e6) / 1e6)
+      : "",
+  );
+
   // Shoes (running workouts only). `shoeId` is the chosen existing pair ("" =
   // none). When adding a new pair, `shoeId` is "__new__" and the name/starting
   // mileage inputs appear. Seeded from the edited workout's attached pair.
@@ -254,6 +266,11 @@ export function WorkoutForm({
   const autoTitle = [todayTitlePrefix(), workoutTypeName]
     .filter(Boolean)
     .join(" ");
+
+  // Offer a manual total-time field only for non-cardio sessions. Cardio types
+  // (Run/Bike/Swim/Row/Hike…) carry their time in the activity's own sets, so a
+  // second top-level duration there would just be a confusing duplicate.
+  const showManualDuration = autoExerciseForType(workoutTypeName) === null;
 
   // ── Plan-day link ──────────────────────────────────────────────────────
   // The non-rest days of the linkable plan, as picker options. Rest days aren't
@@ -373,11 +390,20 @@ export function WorkoutForm({
     const newName = addingNew ? newShoeName.trim() : "";
     const startMi = Number(newShoeStartMi);
 
+    // Manual total time → seconds. Only honored for non-cardio types; otherwise
+    // (or when blank) send null so an edit clears any prior override.
+    const durMin = Number(durationMin);
+    const durationS =
+      showManualDuration && durationMin.trim() !== "" && !Number.isNaN(durMin) && durMin > 0
+        ? Math.round(durMin * 60)
+        : null;
+
     return {
       title: title || undefined,
       workoutTypeId: workoutTypeId || undefined,
       workoutTypeName: workoutTypeName || undefined,
       notes: notes || undefined,
+      durationS,
       performedOn,
       // Link only when a plan day is chosen; otherwise clear it (both null).
       planId: planDayDate ? plan?.id ?? null : null,
@@ -621,6 +647,19 @@ export function WorkoutForm({
         </div>
       )}
 
+      {/* Manual total session time: non-cardio types only (a run's time lives in
+          its own sets). MM:SS, mirroring the per-exercise duration input. */}
+      {showManualDuration && (
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">Total time (optional)</span>
+          <MinSecInput value={durationMin} onChange={setDurationMin} />
+          <p className="text-xs text-faint">
+            Overall session length — used for your history and trends when the
+            exercises below don&apos;t capture it.
+          </p>
+        </div>
+      )}
+
       {instances.map((inst) => (
         <InstanceCard
           key={inst.uid}
@@ -806,52 +845,10 @@ function MetricInput({
   const labelText = `${field.label}${field.optional ? "" : " *"}`;
 
   if (field.minSec) {
-    // Render as a MM:SS clock. The displayed value is still DISPLAY-MINUTES under
-    // the hood; empty shows "00" so the field reads "00:00" and invites editing.
-    const { min, sec } = minutesToMinSec(value);
-    // Text inputs (not number) so the zero-padded "00" actually renders — number
-    // inputs strip leading zeros. We keep only digits from each field.
-    const pad2 = (n: string) => (n === "" ? "00" : n.padStart(2, "0"));
-    const digits = (s: string) => s.replace(/\D/g, "");
-    const commit = (m: string, s: string) => onChange(minSecToMinutes(m, s));
-    const timeInput =
-      "w-10 rounded-xl border border-line-strong bg-paper px-1.5 py-2 text-center text-base tabular-nums text-ink focus:border-rust focus:outline-none";
     return (
       <div className="space-y-0.5">
         <span className="text-xs text-faint">{labelText}</span>
-        <div className="flex items-start gap-1">
-          <div className="flex flex-col items-center">
-            <input
-              type="text"
-              inputMode="numeric"
-              aria-label={`${field.label} minutes`}
-              value={pad2(min)}
-              onFocus={(e) => e.target.select()}
-              onChange={(e) => commit(digits(e.target.value), sec)}
-              className={timeInput}
-            />
-            <span className="text-[10px] uppercase tracking-wide text-faint">
-              MM
-            </span>
-          </div>
-          <span aria-hidden className="pt-2 text-base font-medium text-muted">
-            :
-          </span>
-          <div className="flex flex-col items-center">
-            <input
-              type="text"
-              inputMode="numeric"
-              aria-label={`${field.label} seconds`}
-              value={pad2(sec)}
-              onFocus={(e) => e.target.select()}
-              onChange={(e) => commit(min, digits(e.target.value))}
-              className={timeInput}
-            />
-            <span className="text-[10px] uppercase tracking-wide text-faint">
-              SS
-            </span>
-          </div>
-        </div>
+        <MinSecInput value={value} onChange={onChange} ariaLabel={field.label} />
       </div>
     );
   }
@@ -872,5 +869,61 @@ function MetricInput({
         className="w-full rounded-xl border border-line-strong bg-paper px-2 py-2 text-base text-ink focus:border-rust focus:outline-none"
       />
     </label>
+  );
+}
+
+/**
+ * A MM:SS clock pair whose value is still DISPLAY-MINUTES under the hood (e.g.
+ * "2.5"), so callers store/convert durations exactly as a plain minutes string.
+ * Empty shows "00" so an untouched field reads "00:00" and invites editing.
+ * Used both inside a set's duration field and for the workout-level total time.
+ */
+function MinSecInput({
+  value,
+  onChange,
+  ariaLabel = "Duration",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel?: string;
+}) {
+  const { min, sec } = minutesToMinSec(value);
+  // Text inputs (not number) so the zero-padded "00" actually renders — number
+  // inputs strip leading zeros. We keep only digits from each field.
+  const pad2 = (n: string) => (n === "" ? "00" : n.padStart(2, "0"));
+  const digits = (s: string) => s.replace(/\D/g, "");
+  const commit = (m: string, s: string) => onChange(minSecToMinutes(m, s));
+  const timeInput =
+    "w-10 rounded-xl border border-line-strong bg-paper px-1.5 py-2 text-center text-base tabular-nums text-ink focus:border-rust focus:outline-none";
+  return (
+    <div className="flex items-start gap-1">
+      <div className="flex flex-col items-center">
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label={`${ariaLabel} minutes`}
+          value={pad2(min)}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => commit(digits(e.target.value), sec)}
+          className={timeInput}
+        />
+        <span className="text-[10px] uppercase tracking-wide text-faint">MM</span>
+      </div>
+      <span aria-hidden className="pt-2 text-base font-medium text-muted">
+        :
+      </span>
+      <div className="flex flex-col items-center">
+        <input
+          type="text"
+          inputMode="numeric"
+          aria-label={`${ariaLabel} seconds`}
+          value={pad2(sec)}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => commit(min, digits(e.target.value))}
+          className={timeInput}
+        />
+        <span className="text-[10px] uppercase tracking-wide text-faint">SS</span>
+      </div>
+    </div>
   );
 }

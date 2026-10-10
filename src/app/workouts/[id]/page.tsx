@@ -5,6 +5,8 @@ import { Header } from "@/app/Header";
 import {
   collapseSets,
   formatSet,
+  formatDurationS,
+  effectiveWorkoutDurationS,
   type MeasurementType,
   type StoredSet,
 } from "@/lib/logging/metrics";
@@ -45,7 +47,7 @@ export default async function WorkoutDetailPage({
   const { data: workout } = await supabase
     .from("workouts")
     .select(
-      "id, title, notes, performed_at, plan_id, plan_day_date, workout_types(name, emoji), shoes(name), training_plans(name), exercise_instances(id, position, sets, exercises(name, measurement_type))",
+      "id, title, notes, performed_at, duration_s, plan_id, plan_day_date, workout_types(name, emoji), shoes(name), training_plans(name), exercise_instances(id, position, sets, total_duration_s, exercises(name, measurement_type))",
     )
     .eq("id", id)
     .single();
@@ -62,6 +64,12 @@ export default async function WorkoutDetailPage({
   const shoeName = (workout.shoes as { name: string } | null)?.name ?? null;
   const instances = [...workout.exercise_instances].sort(
     (a, b) => a.position - b.position,
+  );
+
+  // A hand-entered total time wins; otherwise fall back to the per-exercise sum.
+  const durationS = effectiveWorkoutDurationS(
+    workout.duration_s,
+    instances.map((i) => i.total_duration_s),
   );
 
   // Plain-text version for the copy button: one line per exercise, its sets
@@ -97,6 +105,7 @@ export default async function WorkoutDetailPage({
             <p className="mt-2 text-sm text-muted">
               {type ? `${type.emoji} ${type.name} · ` : ""}
               {formatDateTime(workout.performed_at)}
+              {durationS > 0 ? ` · ⏱ ${formatDurationS(durationS)}` : ""}
               {shoeName ? ` · 👟 ${shoeName}` : ""}
             </p>
             {planLink && (
